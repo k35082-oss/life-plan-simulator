@@ -1075,6 +1075,7 @@ function updateFund(broker, id, key, value) {
       renderFunds(broker);
     }
   }
+  updateBrokerTotal(broker);
 }
 function renderFunds(broker) {
   const presetOptions = Object.keys(FUND_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('');
@@ -1110,6 +1111,7 @@ function renderFunds(broker) {
         <select onchange="updateFund('${broker}',${f.id},'accountType',this.value)" style="font-size:0.82em">
           <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
           <option value="tokutei" ${f.accountType==='tokutei'?'selected':''}>特定口座</option>
+          <option value="ippan" ${f.accountType==='ippan'?'selected':''}>一般口座</option>
         </select>
       </div>
       <button class="btn-small btn-danger" onclick="removeFund('${broker}',${f.id})" style="margin-bottom:2px">削除</button>
@@ -1121,7 +1123,7 @@ function updateBrokerTotal(broker) {
   const total = funds[broker].reduce((s,f) => s + (parseFloat(f.balance)||0), 0);
   const monthly = funds[broker].reduce((s,f) => s + (parseFloat(f.monthly)||0), 0);
   const el = document.getElementById(`brokerTotal_${broker}`);
-  if (el) el.textContent = `残高: ${total.toLocaleString()}万 / 積立: ${monthly}万/月`;
+  if (el) el.textContent = `残高: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月`;
 }
 function getAllFundsFlat() {
   // シミュレーション用: 全ファンドを配列で返す
@@ -1389,8 +1391,8 @@ function simulate() {
       // 売却年チェック（sellAfterYearsが設定され、その年数が経過したら売却→現金へ）
       if (f.sellAfterYears !== null && year >= f.sellAfterYears) {
         let proceeds = f.currentBalance;
-        // 特定口座: 利益に20.315%課税
-        if (f.accountType === 'tokutei') {
+        // 特定口座・一般口座: 利益に20.315%課税（NISAは非課税）
+        if (f.accountType === 'tokutei' || f.accountType === 'ippan') {
           const profit = Math.max(0, f.currentBalance - f.totalContribution);
           const tax = profit * 0.20315;
           proceeds = f.currentBalance - tax;
