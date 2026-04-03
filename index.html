@@ -1054,9 +1054,9 @@ const FUND_PRESETS = {
 
 let funds = { rakuten: [], sbi: [], other: [] };
 
-function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='') {
+function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='', accountType='nisa') {
   funds[broker].push({
-    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, sellAfterYears
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, sellAfterYears, accountType
   });
   renderFunds(broker);
 }
@@ -1106,6 +1106,12 @@ function renderFunds(broker) {
           oninput="updateFund('${broker}',${f.id},'sellAfterYears',this.value)"
           onchange="updateFund('${broker}',${f.id},'sellAfterYears',this.value)">
       </div>
+      <div class="field field-narrow"><label>口座</label>
+        <select onchange="updateFund('${broker}',${f.id},'accountType',this.value)" style="font-size:0.82em">
+          <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
+          <option value="tokutei" ${f.accountType==='tokutei'?'selected':''}>特定口座</option>
+        </select>
+      </div>
       <button class="btn-small btn-danger" onclick="removeFund('${broker}',${f.id})" style="margin-bottom:2px">削除</button>
     </div>
   `).join('');
@@ -1126,7 +1132,9 @@ function getAllFundsFlat() {
         balance: parseFloat(f.balance) || 0,
         monthly: parseFloat(f.monthly) || 0,
         returnRate: (parseFloat(f.returnRate) || 0) / 100,
-        sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null
+        sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+        accountType: f.accountType || 'nisa',
+        totalContribution: parseFloat(f.balance) || 0  // 元本追跡用（積立額を累積）
       });
     });
   });
@@ -1233,7 +1241,7 @@ function simulate() {
   // 資産（銀行口座合計）
   let cashAssets = getBankAccountTotal();
   // 各ファンドの状態を個別管理（ファンドごとに利回りが異なるため）
-  const fundStates = getAllFundsFlat().map(f => ({ ...f, currentBalance: f.balance }));
+  const fundStates = getAllFundsFlat().map(f => ({ ...f, currentBalance: f.balance, totalContribution: f.balance }));
   const investMonthlyTotal = fundStates.reduce((s,f) => s + f.monthly, 0);
 
   // iDeCo
@@ -1380,7 +1388,14 @@ function simulate() {
       }
       // 売却年チェック（sellAfterYearsが設定され、その年数が経過したら売却→現金へ）
       if (f.sellAfterYears !== null && year >= f.sellAfterYears) {
-        cashAssets += f.currentBalance;
+        let proceeds = f.currentBalance;
+        // 特定口座: 利益に20.315%課税
+        if (f.accountType === 'tokutei') {
+          const profit = Math.max(0, f.currentBalance - f.totalContribution);
+          const tax = profit * 0.20315;
+          proceeds = f.currentBalance - tax;
+        }
+        cashAssets += proceeds;
         f.sold = true;
         f.currentBalance = 0;
         investAssets += 0;
@@ -1389,6 +1404,7 @@ function simulate() {
       const gain = f.currentBalance * f.returnRate;
       investGain += gain;
       f.currentBalance += gain + f.monthly * 12;
+      f.totalContribution += f.monthly * 12;  // 元本累積
       investAssets += f.currentBalance;
     });
 
@@ -1760,7 +1776,7 @@ function getAllInputValues() {
   inputs._incomeSteps = incomeSteps.map(s => ({ age: s.age, who: s.who, amount: s.amount }));
   inputs._funds = {};
   ['rakuten','sbi','other'].forEach(b => {
-    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, sellAfterYears: f.sellAfterYears || '' }));
+    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
   });
   inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
   inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
