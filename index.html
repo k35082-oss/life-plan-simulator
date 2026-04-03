@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ライフプランシミュレーション</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #1a1a2e; --bg2: #16213e; --bg3: #0f3460;
+  --accent: #e94560; --accent2: #00d2ff;
+  --text: #eee; --text2: #aaa; --border: #333;
+  --input-bg: #1e2a45; --green: #4ade80; --red: #f87171;
+  --yellow: #fbbf24; --purple: #a78bfa;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text); line-height: 1.5;
+  padding: 12px; max-width: 1200px; margin: 0 auto;
+  min-height: 100vh;
+}
+h1 { font-size: 1.4em; margin-bottom: 4px; color: var(--accent2); }
+.subtitle { font-size: 0.8em; color: var(--text2); margin-bottom: 10px; }
+h2 {
+  font-size: 1.05em; margin: 0; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+}
+h2::before { content: '▼'; font-size: 0.65em; transition: transform 0.2s; }
+h2.collapsed::before { transform: rotate(-90deg); }
+h3 { font-size: 0.9em; color: var(--accent2); margin: 8px 0 4px; }
+
+#top-sticky {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(26,26,46,0.95);
+  padding-bottom: 8px;
+}
+.toolbar {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; padding: 6px 0;
+}
+.toolbar button {
+  padding: 5px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg2); color: var(--text); cursor: pointer; font-size: 0.82em;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: all 0.15s;
+}
+.toolbar button:hover { background: var(--bg3); }
+.toolbar button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.toolbar button.primary:hover { opacity: 0.9; }
+
+.section {
+  background: var(--bg2);
+  border-radius: 12px; padding: 12px;
+  margin-bottom: 8px; border: 1px solid var(--border);
+}
+.section-body { margin-top: 8px; }
+.section-body.hidden { display: none; }
+
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; align-items: center; }
+.field { flex: 1; min-width: 130px; }
+.field label { display: block; font-size: 0.78em; color: var(--text2); margin-bottom: 1px; }
+.field input, .field select {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--input-bg); color: var(--text); font-size: 0.9em;
+}
+.field input:focus, .field select:focus { outline: none; border-color: var(--accent2); }
+.field-narrow { flex: 0 0 95px; min-width: 75px; }
+.field-wide { flex: 2; min-width: 180px; }
+.unit { font-size: 0.75em; color: var(--text2); margin-left: 3px; }
+
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent2); }
+.checkbox-row label { font-size: 0.9em; }
+
+.info-box {
+  background: rgba(0,210,255,0.08); border: 1px solid rgba(0,210,255,0.2);
+  border-radius: 6px; padding: 8px 10px; margin: 6px 0; font-size: 0.82em; color: var(--accent2);
+}
+
+.event-row { display: flex; gap: 6px; align-items: end; margin-bottom: 5px; }
+.event-row .field { min-width: 55px; }
+.btn-small {
+  padding: 4px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg3); color: var(--text); cursor: pointer; font-size: 0.78em; white-space: nowrap;
+}
+.btn-small:hover { opacity: 0.8; }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-add { border-color: var(--green); color: var(--green); }
+
+.broker-section {
+  background: rgba(0,0,0,0.15); border-radius: 8px; padding: 8px 10px;
+}
+
+#chart-container {
+  background: var(--bg2); border-radius: 10px; padding: 12px;
+  margin-bottom: 8px; border: 1px solid var(--border);
+}
+canvas { max-height: 260px; }
+
+.summary-cards {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;
+}
+.summary-card {
+  flex: 1; min-width: 140px;
+  background: var(--bg2);
+  border-radius: 10px; padding: 10px 12px;
+  border: 1px solid var(--border); text-align: center;
+}
+.summary-card .label { font-size: 0.75em; color: var(--text2); }
+.summary-card .value { font-size: 1.3em; font-weight: bold; margin-top: 2px; }
+
+.table-container { overflow-x: auto; max-height: 500px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
+th, td { padding: 5px 7px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { background: var(--bg3); color: var(--accent2); position: sticky; top: 0; z-index: 1; }
+td:first-child, th:first-child { text-align: center; }
+tr:hover td { background: rgba(0,210,255,0.05); }
+tr.negative td { color: var(--red); }
+tr.highlight td { background: rgba(233,69,96,0.15); }
+
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--bg3); color: var(--text); padding: 10px 20px;
+  border-radius: 8px; font-size: 0.9em; opacity: 0; transition: opacity 0.3s; z-index: 200;
+}
+.toast.show { opacity: 1; }
+
+@media (max-width: 600px) {
+  body { padding: 6px; }
+  .field { min-width: 90px; }
+  .row { gap: 5px; }
+  table { font-size: 0.68em; }
+  th, td { padding: 3px 4px; }
+  .summary-card { min-width: 100px; padding: 6px; }
+  .summary-card .value { font-size: 1.1em; }
+  canvas { max-height: 180px; }
+}
+</style>
+</head>
+<body>
+
+<h1>ライフプランシミュレーション</h1>
+<div class="subtitle">収入・支出・資産・ローン・年金・投資を総合的にシミュレーション</div>
+
+<div id="top-sticky">
+  <div class="toolbar">
+    <button class="primary" onclick="simulate()">再計算</button>
+    <button onclick="saveToLocal()">保存</button>
+    <button onclick="loadFromLocal()">読込</button>
+    <button onclick="exportJSON()">JSON出力</button>
+    <button onclick="importJSON()">JSON読込</button>
+    <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileImport(event)">
+  </div>
+  <div id="chart-container">
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+
+<!-- サマリーカード -->
+<div class="summary-cards" id="summaryCards">
+  <div class="summary-card"><div class="label">60歳時 総資産</div><div class="value" id="sum60">-</div></div>
+  <div class="summary-card"><div class="label">65歳時 総資産</div><div class="value" id="sum65">-</div></div>
+  <div class="summary-card"><div class="label">70歳時 総資産</div><div class="value" id="sum70">-</div></div>
+  <div class="summary-card"><div class="label">資産枯渇年齢</div><div class="value" id="sumDeplete">-</div></div>
+</div>
+
+<!-- ===== 基本情報 ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">基本情報</h2>
+  <div class="section-body">
+    <div class="row">
+      <div class="field field-narrow"><label>現在の年齢</label><input type="number" id="myAge" value="37" min="0" max="100"></div>
+      <div class="field field-narrow"><label>パートナー年齢</label><input type="number" id="partnerAge" value="35" min="0" max="100"></div>
+      <div class="field field-narrow"><label>終了年齢</label><input type="number" id="endAge" value="80" min="40" max="100"></div>
+    </div>
+    <div class="row">
+      <div class="field field-narrow"><label>自分の退職年齢</label><input type="number" id="myRetireAge" value="65" min="30" max="80"></div>
+      <div class="field field-narrow"><label>パートナー退職</label><input type="number" id="partnerRetireAge" value="65" min="30" max="80"></div>
+      <div class="field field-narrow"><label>インフレ率<span class="unit">%/年</span></label><input type="number" id="inflationRate" value="1.0" step="0.1" min="0" max="10"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 収入 ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">収入</h2>
+  <div class="section-body">
+    <div class="row">
+      <div class="field"><label>自分の年収（手取り）<span class="unit">万円</span></label><input type="number" id="myIncome" value="500" step="10"></div>
+      <div class="field"><label>パートナー年収（手取り）<span class="unit">万円</span></label><input type="number" id="partnerIncome" value="300" step="10"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>自分のボーナス（年額）<span class="unit">万円</span></label><input type="number" id="myBonus" value="100" step="10"></div>
+      <div class="field"><label>パートナーボーナス<span class="unit">万円</span></label><input type="number" id="partnerBonus" value="50" step="10"></div>
+    </div>
+    <div class="row">
+      <div class="field field-narrow"><label>昇給率<span class="unit">%/年</span></label><input type="number" id="raiseRate" value="1.0" step="0.1" min="0" max="10"></div>
+    </div>
+
+    <h3>年収ステップ変更（転職・役職定年など）</h3>
+    <div id="incomeStepList"></div>
+    <button class="btn-small btn-add" onclick="addIncomeStep()">+ ステップ追加</button>
+
+    <h3>退職金</h3>
+    <div class="row">
+      <div class="field"><label>自分の退職金<span class="unit">万円</span></label><input type="number" id="myRetireBonus" value="1500" step="100"></div>
+      <div class="field"><label>パートナー退職金<span class="unit">万円</span></label><input type="number" id="partnerRetireBonus" value="500" step="100"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 年金 ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">年金</h2>
+  <div class="section-body">
+    <div class="info-box" id="pensionEstimateBox">
+      年収から年金額を自動推計します。「手動設定」にチェックで直接入力も可能。
+    </div>
+
+    <h3>自分の年金</h3>
+    <div class="row">
+      <div class="field field-narrow"><label>受給開始年齢</label><input type="number" id="myPensionStartAge" value="65" min="60" max="75"></div>
+      <div class="field"><label>額面年収（税込）<span class="unit">万円</span></label><input type="number" id="myGrossIncome" value="700" step="10"></div>
+      <div class="field field-narrow"><label>就労開始年齢</label><input type="number" id="myWorkStartAge" value="22" min="15" max="40"></div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="myPensionManual">
+      <label for="myPensionManual">手動設定</label>
+    </div>
+    <div class="row" id="myPensionManualFields" style="display:none">
+      <div class="field"><label>年金額（年額）<span class="unit">万円</span></label><input type="number" id="myPensionAmount" value="180" step="5"></div>
+    </div>
+    <div class="info-box" id="myPensionCalc">推計中...</div>
+
+    <h3>パートナーの年金</h3>
+    <div class="row">
+      <div class="field field-narrow"><label>受給開始年齢</label><input type="number" id="partnerPensionStartAge" value="65" min="60" max="75"></div>
+      <div class="field"><label>額面年収（税込）<span class="unit">万円</span></label><input type="number" id="partnerGrossIncome" value="400" step="10"></div>
+      <div class="field field-narrow"><label>就労開始年齢</label><input type="number" id="partnerWorkStartAge" value="22" min="15" max="40"></div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="partnerPensionManual">
+      <label for="partnerPensionManual">手動設定</label>
+    </div>
+    <div class="row" id="partnerPensionManualFields" style="display:none">
+      <div class="field"><label>年金額（年額）<span class="unit">万円</span></label><input type="number" id="partnerPensionAmount" value="120" step="5"></div>
+    </div>
+    <div class="info-box" id="partnerPensionCalc">推計中...</div>
+  </div>
+</div>
+
+<!-- ===== 資産・投資 ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">資産・投資</h2>
+  <div class="section-body">
+    <h3>現金資産（銀行口座別）</h3>
+    <div class="info-box">銀行口座を追加して、口座別に残高を管理できます。合計が初期現金資産になります。</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-weight:bold;color:var(--accent2);margin-bottom:4px;font-size:0.88em">自分</div>
+        <div id="bankAccountListMy"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <button class="btn-small btn-add" onclick="addBankAccount('my')">+ 口座追加</button>
+          <span class="info-box" id="bankAccountTotalMy" style="margin:0;padding:2px 8px;font-size:0.78em;font-weight:bold">小計: -</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-weight:bold;color:var(--accent2);margin-bottom:4px;font-size:0.88em">パートナー</div>
+        <div id="bankAccountListPartner"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <button class="btn-small btn-add" onclick="addBankAccount('partner')">+ 口座追加</button>
+          <span class="info-box" id="bankAccountTotalPartner" style="margin:0;padding:2px 8px;font-size:0.78em;font-weight:bold">小計: -</span>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:right;margin-top:6px">
+      <span class="info-box" id="bankAccountTotal" style="padding:4px 12px;font-size:0.88em;font-weight:bold">合計: -</span>
+    </div>
+
+    <h3>投資（積立NISA・特定口座等）</h3>
+    <div class="info-box">証券会社ごとにファンドを追加できます。各ファンドに残高・積立額・利回りを個別設定。「売却」に年数を入れると、その年数後に全額を現金化します。</div>
+
+    <div id="brokerSection_rakuten" class="broker-section">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">楽天証券</b>
+        <span class="info-box" id="brokerTotal_rakuten" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div id="fundList_rakuten"></div>
+      <button class="btn-small btn-add" onclick="addFund('rakuten')">+ ファンド追加</button>
+    </div>
+
+    <div id="brokerSection_sbi" class="broker-section" style="margin-top:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">SBI証券</b>
+        <span class="info-box" id="brokerTotal_sbi" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div id="fundList_sbi"></div>
+      <button class="btn-small btn-add" onclick="addFund('sbi')">+ ファンド追加</button>
+    </div>
+
+    <div id="brokerSection_other" class="broker-section" style="margin-top:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">その他</b>
+        <span class="info-box" id="brokerTotal_other" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div id="fundList_other"></div>
+      <button class="btn-small btn-add" onclick="addFund('other')">+ ファンド追加</button>
+    </div>
+
+    <h3>iDeCo（個人型確定拠出年金）</h3>
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasIdeco" checked>
+      <label for="hasIdeco">iDeCoあり</label>
+    </div>
+    <div id="idecoFields">
+      <div class="row">
+        <div class="field"><label>職業区分</label>
+          <select id="idecoCategory" onchange="updateIdecoLimit()">
+            <option value="employee_none">会社員（企業年金なし）</option>
+            <option value="employee_dc">会社員（企業型DCのみ）</option>
+            <option value="employee_db">会社員（DB/企業年金あり）</option>
+            <option value="civil">公務員</option>
+            <option value="self">自営業・フリーランス</option>
+            <option value="spouse">専業主婦/主夫</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>現在残高<span class="unit">万円</span></label><input type="number" id="idecoBalance" value="50" step="10"></div>
+        <div class="field"><label>月額拠出<span class="unit">万円</span></label><input type="number" id="idecoMonthly" value="2.3" step="0.1" min="0"></div>
+        <div class="field field-narrow"><label>期待利回り<span class="unit">%/年</span></label><input type="number" id="idecoReturn" value="4.0" step="0.5" min="0" max="20"></div>
+      </div>
+      <div class="info-box" id="idecoLimitInfo" style="margin-bottom:4px">上限: 月2.3万円（年27.6万円）</div>
+      <div class="row">
+        <div class="field field-narrow"><label>受取開始年齢</label><input type="number" id="idecoStartAge" value="60" min="60" max="75"></div>
+        <div class="field"><label>受取方法</label>
+          <select id="idecoMethod">
+            <option value="lump">一括受取</option>
+            <option value="annuity10">年金受取（10年）</option>
+            <option value="annuity20">年金受取（20年）</option>
+          </select>
+        </div>
+      </div>
+      <div class="info-box" id="idecoEstimate">推計中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 支出 ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">支出（月額）</h2>
+  <div class="section-body">
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="expenseDetailMode">
+      <label for="expenseDetailMode">詳細モード（項目別に入力）</label>
+    </div>
+
+    <!-- 総額モード -->
+    <div id="expenseSimpleFields">
+      <div class="row">
+        <div class="field"><label>生活費合計（保険含む）<span class="unit">万円/月</span></label><input type="number" id="livingCost" value="25" step="1"></div>
+        <div class="field"><label>旅行・家電積立<span class="unit">万円/月</span></label><input type="number" id="funSaving" value="3" step="0.5"></div>
+      </div>
+    </div>
+
+    <!-- 詳細モード -->
+    <div id="expenseDetailFields" style="display:none">
+      <div class="info-box">項目名は自由に変更できます。合計が自動で生活費に反映されます。</div>
+      <div id="expenseCategoryList"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+        <button class="btn-small btn-add" onclick="addExpenseCategory()">+ 項目追加</button>
+        <span class="info-box" id="expenseCategoryTotal" style="margin:0;padding:2px 10px;font-size:0.82em;font-weight:bold">合計: -</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>旅行・家電積立<span class="unit">万円/月</span></label><input type="number" id="funSavingDetail" value="3" step="0.5"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <div class="field"><label>防衛資金 目標額<span class="unit">万円</span></label><input type="number" id="emergencyTarget" value="300" step="50"></div>
+      <div class="field"><label>防衛資金 月額積立<span class="unit">万円/月</span></label><input type="number" id="emergencyMonthly" value="3" step="0.5"></div>
+    </div>
+
+    <h3>車関連費用</h3>
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasCar" checked>
+      <label for="hasCar">車所有あり</label>
+    </div>
+    <div id="carFields">
+      <div class="row">
+        <div class="field"><label>駐車場・ガソリン等<span class="unit">万円/月</span></label><input type="number" id="carMonthly" value="3" step="0.5" min="0"></div>
+        <div class="field"><label>自動車税（年額）<span class="unit">万円</span></label><input type="number" id="carTax" value="4" step="0.5" min="0"></div>
+        <div class="field"><label>車検費用（2年毎）<span class="unit">万円</span></label><input type="number" id="carInspection" value="10" step="1" min="0"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>買い替え費用<span class="unit">万円</span></label><input type="number" id="carReplacement" value="300" step="50"></div>
+        <div class="field field-narrow"><label>買い替え間隔<span class="unit">年</span></label><input type="number" id="carReplaceCycle" value="10" step="1" min="3" max="20"></div>
+        <div class="field field-narrow"><label>次の買い替え年齢</label><input type="number" id="carNextReplace" value="42" min="0" max="100"></div>
+      </div>
+    </div>
+  </div>
+
+    <h3>家電買い替え</h3>
+    <div id="applianceList"></div>
+    <button class="btn-small btn-add" onclick="addAppliance()">+ 家電追加</button>
+  </div>
+</div>
+
+<!-- ===== 住宅ローン ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">住宅ローン</h2>
+  <div class="section-body">
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasHomeLoan" checked>
+      <label for="hasHomeLoan">住宅ローンあり</label>
+    </div>
+    <div id="homeLoanFields">
+      <div class="row">
+        <div class="field"><label>借入残高<span class="unit">万円</span></label><input type="number" id="homeLoanBalance" value="3000" step="100"></div>
+        <div class="field field-narrow"><label>金利<span class="unit">%/年</span></label><input type="number" id="homeLoanRate" value="0.5" step="0.1" min="0" max="10"></div>
+        <div class="field field-narrow"><label>残り期間<span class="unit">年</span></label><input type="number" id="homeLoanYears" value="30" step="1" min="1" max="50"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>月々返済額（空欄=自動計算）<span class="unit">万円</span></label><input type="number" id="homeLoanMonthly" value="" step="0.1" placeholder="自動計算"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== その他ローン ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">その他ローン</h2>
+  <div class="section-body">
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasOtherLoan">
+      <label for="hasOtherLoan">その他ローンあり</label>
+    </div>
+    <div id="otherLoanFields" style="display:none">
+      <div class="row">
+        <div class="field"><label>借入残高<span class="unit">万円</span></label><input type="number" id="otherLoanBalance" value="0" step="50"></div>
+        <div class="field field-narrow"><label>金利<span class="unit">%/年</span></label><input type="number" id="otherLoanRate" value="2.0" step="0.1" min="0" max="20"></div>
+        <div class="field field-narrow"><label>残り期間<span class="unit">年</span></label><input type="number" id="otherLoanYears" value="5" step="1" min="1" max="50"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 子ども ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">子ども</h2>
+  <div class="section-body">
+    <div class="checkbox-row">
+      <input type="checkbox" id="hasChild" checked>
+      <label for="hasChild">子どもあり</label>
+    </div>
+    <div id="childFields">
+      <div class="row">
+        <div class="field field-narrow"><label>現在の年齢</label><input type="number" id="childAge" value="3" min="0" max="22"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>小学校</label>
+          <select id="eduElementary"><option value="public">公立（35万/年）</option><option value="private">私立（167万/年）</option></select>
+        </div>
+        <div class="field"><label>中学校</label>
+          <select id="eduMiddle"><option value="public">公立（54万/年）</option><option value="private">私立（144万/年）</option></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>高校</label>
+          <select id="eduHigh"><option value="public">公立（51万/年）</option><option value="private">私立（105万/年）</option></select>
+        </div>
+        <div class="field"><label>大学</label>
+          <select id="eduUniv">
+            <option value="public">国公立（70万/年）</option>
+            <option value="private_arts">私立文系（120万/年）</option>
+            <option value="private_sci">私立理系（170万/年）</option>
+          </select>
+        </div>
+      </div>
+      <div class="info-box" id="childAllowanceInfo">児童手当: 0〜2歳 月1.5万、3歳〜小学校 月1万（第3子以降1.5万）、中学 月1万を自動計算</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 特別イベント ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">特別イベント</h2>
+  <div class="section-body">
+    <div id="eventList"></div>
+    <button class="btn-small btn-add" onclick="addEvent()">+ イベント追加</button>
+  </div>
+</div>
+
+<!-- ===== テーブル ===== -->
+<div class="section">
+  <h2 onclick="toggleSection(this)">年齢別詳細テーブル</h2>
+  <div class="section-body">
+    <div class="table-container">
+      <table id="resultTable">
+        <thead>
+          <tr>
+            <th>年齢</th><th>収入</th><th>年金</th><th>支出</th><th>学費</th>
+            <th>ローン</th><th>車</th><th>家電</th><th>イベント</th>
+            <th>投資損益</th><th>iDeCo損益</th><th>切崩し</th><th>年間収支</th><th>現金</th><th>防衛</th><th>投資</th><th>iDeCo</th><th>総資産</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<datalist id="fundPresets">
+  <option value="S&P500"><option value="オルカン"><option value="NASDAQ100">
+  <option value="GOLD"><option value="インドNifty50"><option value="先進国債券">
+  <option value="国内REIT"><option value="新興国株式"><option value="バランス型">
+  <option value="日経225"><option value="TOPIX"><option value="米国債券">
+  <option value="全世界債券"><option value="ハイイールド債"><option value="コモディティ">
+</datalist>
+<div class="toast" id="toast"></div>
+
+<script>
+// ====== 定数 ======
+const EDU_COST = {
+  elementary: { public: 35, private: 167 },
+  middle:     { public: 54, private: 144 },
+  high:       { public: 51, private: 105 },
+  univ:       { public: 70, private_arts: 120, private_sci: 170 }
+};
+
+// 児童手当 (万円/月) — 2024年拡充後
+function childAllowanceMonthly(childAge) {
+  if (childAge < 0 || childAge >= 15) return 0; // 中学卒業まで
+  if (childAge < 3) return 1.5;  // 0-2歳
+  return 1.0; // 3歳〜中学
+}
+
+// 学費
+function getEduCost(childAge) {
+  if (childAge >= 6 && childAge <= 11) return EDU_COST.elementary[document.getElementById('eduElementary').value] || 0;
+  if (childAge >= 12 && childAge <= 14) return EDU_COST.middle[document.getElementById('eduMiddle').value] || 0;
+  if (childAge >= 15 && childAge <= 17) return EDU_COST.high[document.getElementById('eduHigh').value] || 0;
+  if (childAge >= 18 && childAge <= 21) return EDU_COST.univ[document.getElementById('eduUniv').value] || 0;
+  return 0;
+}
+
+// ====== 年金計算（日本の公的年金 簡易推計） ======
+// 参考: https://nenkin-shisan.mhlw.go.jp/
+function estimatePension(grossIncomeManYen, workStartAge, retireAge) {
+  const contributionYears = Math.min(retireAge - workStartAge, 40);
+  if (contributionYears <= 0) return 0;
+
+  // 1) 基礎年金（国民年金）: 満額 約81.6万円/年 (2024年度) × 加入年数/40
+  const basicPension = 81.6 * Math.min(contributionYears, 40) / 40;
+
+  // 2) 厚生年金（報酬比例部分）
+  // 平均標準報酬月額 = 額面年収 ÷ 12（ボーナス込みの総報酬制）
+  // ただし上限65万円/月
+  const avgMonthly = Math.min(grossIncomeManYen / 12, 65);
+  // 報酬比例部分 = 平均標準報酬額(万円) × 5.481/1000 × 加入月数
+  const employeePension = avgMonthly * 5.481 / 1000 * contributionYears * 12;
+
+  return Math.round((basicPension + employeePension) * 10) / 10;
+}
+
+// 繰下げ増額率: 1ヶ月あたり0.7%増（65歳基準）
+function adjustPensionForAge(basePension, startAge) {
+  const diffMonths = (startAge - 65) * 12;
+  if (diffMonths > 0) return basePension * (1 + diffMonths * 0.007); // 繰下げ増額
+  if (diffMonths < 0) return basePension * (1 + diffMonths * 0.004); // 繰上げ減額 0.4%/月
+  return basePension;
+}
+
+function updatePensionDisplay() {
+  // 自分
+  if (!isChecked('myPensionManual')) {
+    const pension = estimatePension(getVal('myGrossIncome'), getVal('myWorkStartAge'), getVal('myRetireAge'));
+    const adjusted = adjustPensionForAge(pension, getVal('myPensionStartAge'));
+    document.getElementById('myPensionCalc').innerHTML =
+      `<b>推計年金額: ${adjusted.toFixed(1)}万円/年（${(adjusted/12).toFixed(1)}万円/月）</b><br>` +
+      `内訳: 基礎年金 ${(81.6 * Math.min(getVal('myRetireAge') - getVal('myWorkStartAge'), 40) / 40).toFixed(1)}万 + ` +
+      `厚生年金 ${(pension - 81.6 * Math.min(getVal('myRetireAge') - getVal('myWorkStartAge'), 40) / 40).toFixed(1)}万` +
+      (getVal('myPensionStartAge') !== 65 ? ` (${getVal('myPensionStartAge')}歳開始で${getVal('myPensionStartAge') > 65 ? '繰下げ増額' : '繰上げ減額'})` : '');
+  } else {
+    document.getElementById('myPensionCalc').textContent = `手動設定: ${getVal('myPensionAmount')}万円/年`;
+  }
+
+  // パートナー
+  if (!isChecked('partnerPensionManual')) {
+    const pension = estimatePension(getVal('partnerGrossIncome'), getVal('partnerWorkStartAge'), getVal('partnerRetireAge'));
+    const adjusted = adjustPensionForAge(pension, getVal('partnerPensionStartAge'));
+    document.getElementById('partnerPensionCalc').innerHTML =
+      `<b>推計年金額: ${adjusted.toFixed(1)}万円/年（${(adjusted/12).toFixed(1)}万円/月）</b>`;
+  } else {
+    document.getElementById('partnerPensionCalc').textContent = `手動設定: ${getVal('partnerPensionAmount')}万円/年`;
+  }
+}
+
+// ====== iDeCo推計 ======
+function updateIdecoDisplay() {
+  if (!isChecked('hasIdeco')) return;
+  const balance = getVal('idecoBalance');
+  const monthly = getVal('idecoMonthly');
+  const ret = getVal('idecoReturn') / 100;
+  const startAge = getVal('idecoStartAge');
+  const currentAge = getVal('myAge');
+  const retireAge = getVal('myRetireAge');
+  const years = Math.max(0, Math.min(retireAge, 60) - currentAge); // 60歳まで拠出
+
+  let total = balance;
+  for (let y = 0; y < years; y++) {
+    total = total * (1 + ret) + monthly * 12;
+  }
+  // 60歳〜受取開始まで運用のみ
+  const waitYears = Math.max(0, startAge - Math.max(currentAge + years, 60));
+  for (let y = 0; y < waitYears; y++) {
+    total *= (1 + ret);
+  }
+
+  document.getElementById('idecoEstimate').innerHTML =
+    `<b>受取時推計額: ${Math.round(total)}万円</b>（${startAge}歳時点）<br>` +
+    `拠出: ${years}年間 × ${monthly}万/月 = ${Math.round(monthly * 12 * years)}万円 + 運用益`;
+}
+
+// ====== ローン月額計算（元利均等） ======
+function calcLoanMonthly(balance, ratePercent, years) {
+  if (balance <= 0 || years <= 0) return 0;
+  const r = ratePercent / 100 / 12;
+  if (r === 0) return balance / (years * 12);
+  const n = years * 12;
+  return balance * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+}
+
+// ====== イベント管理 ======
+let events = [];
+function addEvent(age='', name='', amount='') {
+  events.push({ id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), age, name, amount });
+  renderEvents();
+}
+function removeEvent(id) {
+  events = events.filter(e => e.id !== id);
+  renderEvents();
+}
+function renderEvents() {
+  document.getElementById('eventList').innerHTML = events.map(e => `
+    <div class="event-row" data-id="${e.id}">
+      <div class="field field-narrow"><label>年齢</label><input type="number" value="${e.age}" min="0" max="100" onchange="updateEvent(${e.id},'age',this.value)"></div>
+      <div class="field field-wide"><label>名称</label><input type="text" value="${e.name}" onchange="updateEvent(${e.id},'name',this.value)" placeholder="車購入、リフォーム等"></div>
+      <div class="field"><label>金額<span class="unit">万円</span></label><input type="number" value="${e.amount}" step="10" onchange="updateEvent(${e.id},'amount',this.value)"></div>
+      <button class="btn-small btn-danger" onclick="removeEvent(${e.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+}
+function updateEvent(id, key, value) {
+  const ev = events.find(e => e.id === id);
+  if (ev) ev[key] = value;
+}
+
+// ====== 銀行口座管理 ======
+let bankAccountsMy = [
+  { id: 1, name: '三井住友銀行', balance: 200 },
+  { id: 2, name: '住信SBIネット銀行', balance: 60 },
+];
+let bankAccountsPartner = [
+  { id: 3, name: '', balance: '' },
+];
+function addBankAccount(who, name='', balance='') {
+  const item = { id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance };
+  if (who === 'partner') bankAccountsPartner.push(item);
+  else bankAccountsMy.push(item);
+  renderBankAccounts(); simulate();
+}
+function removeBankAccount(who, id) {
+  if (who === 'partner') bankAccountsPartner = bankAccountsPartner.filter(a => a.id !== id);
+  else bankAccountsMy = bankAccountsMy.filter(a => a.id !== id);
+  renderBankAccounts(); simulate();
+}
+function renderBankAccountList(list, who, containerId) {
+  document.getElementById(containerId).innerHTML = list.map(a => `
+    <div class="event-row" data-id="${a.id}" style="flex-wrap:wrap">
+      <div class="field" style="flex:1;min-width:100px"><label>銀行名</label><input type="text" value="${a.name}" oninput="updateBankAccount('${who}',${a.id},'name',this.value)" placeholder="銀行名"></div>
+      <div class="field" style="width:90px"><label>残高<span class="unit">万円</span></label><input type="number" value="${a.balance}" step="10" min="0" oninput="updateBankAccount('${who}',${a.id},'balance',this.value)"></div>
+      <button class="btn-small btn-danger" onclick="removeBankAccount('${who}',${a.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+}
+function renderBankAccounts() {
+  renderBankAccountList(bankAccountsMy, 'my', 'bankAccountListMy');
+  renderBankAccountList(bankAccountsPartner, 'partner', 'bankAccountListPartner');
+  updateBankAccountTotal();
+}
+function updateBankAccount(who, id, key, value) {
+  const list = who === 'partner' ? bankAccountsPartner : bankAccountsMy;
+  const a = list.find(e => e.id === id);
+  if (a) a[key] = value;
+  if (key === 'balance') updateBankAccountTotal();
+}
+function updateBankAccountTotal() {
+  const totalMy = bankAccountsMy.reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
+  const totalPartner = bankAccountsPartner.reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
+  const elMy = document.getElementById('bankAccountTotalMy');
+  const elP = document.getElementById('bankAccountTotalPartner');
+  const elAll = document.getElementById('bankAccountTotal');
+  if (elMy) elMy.textContent = `小計: ${totalMy.toLocaleString()}万円`;
+  if (elP) elP.textContent = `小計: ${totalPartner.toLocaleString()}万円`;
+  if (elAll) elAll.textContent = `合計: ${(totalMy + totalPartner).toLocaleString()}万円`;
+}
+function getBankAccountTotal() {
+  return bankAccountsMy.reduce((s, a) => s + (parseFloat(a.balance) || 0), 0)
+       + bankAccountsPartner.reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
+}
+
+// ====== 家電買い替え管理 ======
+let appliances = [
+  { id: 1, name: '冷蔵庫', cost: 25, cycle: 12, yearsUsed: 5 },
+  { id: 2, name: '洗濯機', cost: 20, cycle: 10, yearsUsed: 3 },
+  { id: 3, name: 'エアコン', cost: 15, cycle: 12, yearsUsed: 5 }
+];
+function addAppliance(name='', cost='', cycle=10, yearsUsed=0) {
+  appliances.push({ id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, cost, cycle, yearsUsed });
+  renderAppliances(); simulate();
+}
+function removeAppliance(id) {
+  appliances = appliances.filter(a => a.id !== id);
+  renderAppliances(); simulate();
+}
+function getApplianceNextAge(a) {
+  const myAge = parseInt(document.getElementById('myAge').value) || 37;
+  const cycle = parseInt(a.cycle) || 10;
+  const used = parseInt(a.yearsUsed) || 0;
+  return myAge + Math.max(0, cycle - used);
+}
+function renderAppliances() {
+  document.getElementById('applianceList').innerHTML = appliances.map(a => {
+    const nextAge = getApplianceNextAge(a);
+    return `
+    <div class="event-row" data-id="${a.id}">
+      <div class="field"><label>名称</label><input type="text" value="${a.name}" onchange="updateAppliance(${a.id},'name',this.value)" oninput="updateAppliance(${a.id},'name',this.value)" placeholder="冷蔵庫、洗濯機等"></div>
+      <div class="field field-narrow"><label>費用<span class="unit">万円</span></label><input type="number" value="${a.cost}" step="1" min="0" oninput="updateAppliance(${a.id},'cost',this.value)" onchange="updateAppliance(${a.id},'cost',this.value)"></div>
+      <div class="field field-narrow"><label>買替間隔<span class="unit">年</span></label><input type="number" value="${a.cycle}" step="1" min="1" max="30" oninput="updateAppliance(${a.id},'cycle',this.value)" onchange="updateAppliance(${a.id},'cycle',this.value)"></div>
+      <div class="field field-narrow"><label>使用年数<span class="unit">年</span></label><input type="number" value="${a.yearsUsed}" step="1" min="0" max="30" oninput="updateAppliance(${a.id},'yearsUsed',this.value)" onchange="updateAppliance(${a.id},'yearsUsed',this.value)"></div>
+      <span id="appNext_${a.id}" style="font-size:0.75em;color:var(--text2);white-space:nowrap;margin-bottom:2px">次回: ${nextAge}歳</span>
+      <button class="btn-small btn-danger" onclick="removeAppliance(${a.id})" style="margin-bottom:2px">削除</button>
+    </div>`;
+  }).join('');
+}
+function updateAppliance(id, key, value) {
+  const a = appliances.find(e => e.id === id);
+  if (a) {
+    a[key] = value;
+    // 次回買替年齢をリアルタイム更新
+    if (key === 'cycle' || key === 'yearsUsed') {
+      const span = document.getElementById('appNext_' + id);
+      if (span) span.textContent = '次回: ' + getApplianceNextAge(a) + '歳';
+    }
+  }
+}
+
+// ====== 支出カテゴリ管理 ======
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { name: '食費（外食）', amount: 3 },
+  { name: '食費（スーパー）', amount: 4 },
+  { name: '家賃', amount: 8 },
+  { name: 'サブスク', amount: 0.5 },
+  { name: '光熱費', amount: 2 },
+  { name: '日用品', amount: 1 },
+  { name: '臨時費', amount: 1 },
+  { name: '交際費', amount: 1.5 },
+  { name: '保険', amount: 2.5 },
+  { name: '保育園料', amount: 3 },
+];
+
+let expenseCategories = [];
+
+function addExpenseCategory(name='', amount='') {
+  expenseCategories.push({ id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, amount });
+  renderExpenseCategories();
+}
+function removeExpenseCategory(id) {
+  expenseCategories = expenseCategories.filter(c => c.id !== id);
+  renderExpenseCategories();
+}
+function updateExpenseCategory(id, key, value) {
+  const c = expenseCategories.find(c => c.id === id);
+  if (c) c[key] = value;
+  if (key === 'amount') updateExpenseCategoryTotal();
+}
+function renderExpenseCategories() {
+  document.getElementById('expenseCategoryList').innerHTML = expenseCategories.map(c => `
+    <div class="event-row" style="align-items:end">
+      <div class="field" style="min-width:110px"><label>項目名</label>
+        <input type="text" value="${c.name}"
+          onchange="updateExpenseCategory(${c.id},'name',this.value)"
+          placeholder="項目名">
+      </div>
+      <div class="field field-narrow"><label>金額<span class="unit">万円/月</span></label>
+        <input type="number" value="${c.amount}" step="0.5" min="0"
+          oninput="updateExpenseCategory(${c.id},'amount',this.value)"
+          onchange="updateExpenseCategory(${c.id},'amount',this.value)">
+      </div>
+      <button class="btn-small btn-danger" onclick="removeExpenseCategory(${c.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+  updateExpenseCategoryTotal();
+}
+function updateExpenseCategoryTotal() {
+  const total = expenseCategories.reduce((s,c) => s + (parseFloat(c.amount)||0), 0);
+  const el = document.getElementById('expenseCategoryTotal');
+  if (el) el.textContent = `合計: ${total.toFixed(1)}万円/月`;
+}
+function getExpenseCategoryTotal() {
+  return expenseCategories.reduce((s,c) => s + (parseFloat(c.amount)||0), 0);
+}
+function initDefaultCategories() {
+  expenseCategories = DEFAULT_EXPENSE_CATEGORIES.map(c => ({
+    ...c, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000)
+  }));
+  renderExpenseCategories();
+}
+
+// ====== 投資ファンド管理 ======
+// 各証券会社ごとにファンドリストを管理
+const FUND_PRESETS = {
+  'S&P500': 8.0, 'オルカン': 7.0, 'NASDAQ100': 10.0,
+  'GOLD': 5.0, 'インドNifty50': 9.0, '先進国債券': 3.0,
+  '国内REIT': 4.0, '新興国株式': 8.0, 'バランス型': 5.0
+};
+
+let funds = { rakuten: [], sbi: [], other: [] };
+
+function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='') {
+  funds[broker].push({
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, sellAfterYears
+  });
+  renderFunds(broker);
+}
+function removeFund(broker, id) {
+  funds[broker] = funds[broker].filter(f => f.id !== id);
+  renderFunds(broker);
+}
+function updateFund(broker, id, key, value) {
+  const f = funds[broker].find(f => f.id === id);
+  if (f) f[key] = value;
+  // プリセットから利回り自動設定
+  if (key === 'name' && FUND_PRESETS[value] !== undefined) {
+    const fnd = funds[broker].find(f => f.id === id);
+    if (fnd && !fnd.returnRate) {
+      fnd.returnRate = FUND_PRESETS[value];
+      renderFunds(broker);
+    }
+  }
+}
+function renderFunds(broker) {
+  const presetOptions = Object.keys(FUND_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('');
+  document.getElementById(`fundList_${broker}`).innerHTML = funds[broker].map(f => `
+    <div class="event-row" style="align-items:end">
+      <div class="field" style="min-width:120px"><label>ファンド名</label>
+        <input type="text" value="${f.name}" list="fundPresets"
+          oninput="updateFund('${broker}',${f.id},'name',this.value)"
+          onchange="updateFund('${broker}',${f.id},'name',this.value)"
+          placeholder="S&P500, GOLD等">
+      </div>
+      <div class="field field-narrow"><label>残高<span class="unit">万円</span></label>
+        <input type="number" value="${f.balance}" step="5" min="0"
+          oninput="updateFund('${broker}',${f.id},'balance',this.value)"
+          onchange="updateFund('${broker}',${f.id},'balance',this.value)">
+      </div>
+      <div class="field field-narrow"><label>積立<span class="unit">万/月</span></label>
+        <input type="number" value="${f.monthly}" step="0.5" min="0"
+          oninput="updateFund('${broker}',${f.id},'monthly',this.value)"
+          onchange="updateFund('${broker}',${f.id},'monthly',this.value)">
+      </div>
+      <div class="field field-narrow"><label>利回り<span class="unit">%/年</span></label>
+        <input type="number" value="${f.returnRate}" step="0.5" min="0" max="30"
+          oninput="updateFund('${broker}',${f.id},'returnRate',this.value)"
+          onchange="updateFund('${broker}',${f.id},'returnRate',this.value)">
+      </div>
+      <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
+        <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
+          oninput="updateFund('${broker}',${f.id},'sellAfterYears',this.value)"
+          onchange="updateFund('${broker}',${f.id},'sellAfterYears',this.value)">
+      </div>
+      <button class="btn-small btn-danger" onclick="removeFund('${broker}',${f.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+  updateBrokerTotal(broker);
+}
+function updateBrokerTotal(broker) {
+  const total = funds[broker].reduce((s,f) => s + (parseFloat(f.balance)||0), 0);
+  const monthly = funds[broker].reduce((s,f) => s + (parseFloat(f.monthly)||0), 0);
+  const el = document.getElementById(`brokerTotal_${broker}`);
+  if (el) el.textContent = `残高: ${total.toLocaleString()}万 / 積立: ${monthly}万/月`;
+}
+function getAllFundsFlat() {
+  // シミュレーション用: 全ファンドを配列で返す
+  const all = [];
+  ['rakuten','sbi','other'].forEach(b => {
+    funds[b].forEach(f => {
+      all.push({
+        balance: parseFloat(f.balance) || 0,
+        monthly: parseFloat(f.monthly) || 0,
+        returnRate: (parseFloat(f.returnRate) || 0) / 100,
+        sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null
+      });
+    });
+  });
+  return all;
+}
+
+// ====== 年収ステップ変更 ======
+let incomeSteps = [];
+function addIncomeStep(age='', who='my', amount='') {
+  incomeSteps.push({ id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), age, who, amount });
+  renderIncomeSteps();
+}
+function removeIncomeStep(id) {
+  incomeSteps = incomeSteps.filter(e => e.id !== id);
+  renderIncomeSteps();
+}
+function renderIncomeSteps() {
+  document.getElementById('incomeStepList').innerHTML = incomeSteps.map(s => `
+    <div class="event-row" data-id="${s.id}">
+      <div class="field field-narrow"><label>年齢</label><input type="number" value="${s.age}" min="0" max="100" onchange="updateIncomeStep(${s.id},'age',this.value)"></div>
+      <div class="field"><label>対象</label>
+        <select onchange="updateIncomeStep(${s.id},'who',this.value)">
+          <option value="my" ${s.who==='my'?'selected':''}>自分</option>
+          <option value="partner" ${s.who==='partner'?'selected':''}>パートナー</option>
+        </select>
+      </div>
+      <div class="field"><label>新しい年収（手取り）<span class="unit">万円</span></label><input type="number" value="${s.amount}" step="10" onchange="updateIncomeStep(${s.id},'amount',this.value)"></div>
+      <button class="btn-small btn-danger" onclick="removeIncomeStep(${s.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+}
+function updateIncomeStep(id, key, value) {
+  const s = incomeSteps.find(e => e.id === id);
+  if (s) s[key] = value;
+}
+
+// ====== メインシミュレーション ======
+let chart = null;
+function getVal(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function isChecked(id) { return document.getElementById(id).checked; }
+
+// iDeCo拠出上限（万円/月）
+const IDECO_LIMITS = {
+  employee_none: 2.3,   // 会社員（企業年金なし）
+  employee_dc: 2.0,     // 会社員（企業型DCのみ）
+  employee_db: 1.2,     // 会社員（DB/企業年金あり）
+  civil: 1.2,           // 公務員
+  self: 6.8,            // 自営業・フリーランス（国民年金基金と合算）
+  spouse: 2.3            // 専業主婦/主夫（第3号被保険者）
+};
+
+function updateIdecoLimit() {
+  const cat = document.getElementById('idecoCategory').value;
+  const limit = IDECO_LIMITS[cat] || 2.3;
+  const annual = Math.round(limit * 12 * 10) / 10;
+  document.getElementById('idecoLimitInfo').textContent = `上限: 月${limit}万円（年${annual}万円）`;
+  // 現在の入力が上限を超えていたらクランプ
+  const monthlyEl = document.getElementById('idecoMonthly');
+  if (parseFloat(monthlyEl.value) > limit) {
+    monthlyEl.value = limit;
+  }
+  monthlyEl.max = limit;
+  simulate();
+}
+
+function simulate() {
+  updatePensionDisplay();
+  updateIdecoDisplay();
+
+  const myAge = getVal('myAge');
+  const endAge = getVal('endAge');
+  const myRetire = getVal('myRetireAge');
+  const partnerRetire = getVal('partnerRetireAge');
+  const partnerAge0 = getVal('partnerAge');
+  const inflationRate = getVal('inflationRate') / 100;
+
+  let myIncomeBase = getVal('myIncome');
+  let partnerIncomeBase = getVal('partnerIncome');
+  const myBonus = getVal('myBonus');
+  const partnerBonus = getVal('partnerBonus');
+  const raiseRate = getVal('raiseRate') / 100;
+
+  // 退職金
+  const myRetireBonus = getVal('myRetireBonus');
+  const partnerRetireBonus = getVal('partnerRetireBonus');
+
+  // 年金
+  const myPensionStart = getVal('myPensionStartAge');
+  const partnerPensionStart = getVal('partnerPensionStartAge');
+  let myPensionAnnual, partnerPensionAnnual;
+  if (isChecked('myPensionManual')) {
+    myPensionAnnual = getVal('myPensionAmount');
+  } else {
+    const base = estimatePension(getVal('myGrossIncome'), getVal('myWorkStartAge'), myRetire);
+    myPensionAnnual = adjustPensionForAge(base, myPensionStart);
+  }
+  if (isChecked('partnerPensionManual')) {
+    partnerPensionAnnual = getVal('partnerPensionAmount');
+  } else {
+    const base = estimatePension(getVal('partnerGrossIncome'), getVal('partnerWorkStartAge'), partnerRetire);
+    partnerPensionAnnual = adjustPensionForAge(base, partnerPensionStart);
+  }
+
+  // 資産（銀行口座合計）
+  let cashAssets = getBankAccountTotal();
+  // 各ファンドの状態を個別管理（ファンドごとに利回りが異なるため）
+  const fundStates = getAllFundsFlat().map(f => ({ ...f, currentBalance: f.balance }));
+  const investMonthlyTotal = fundStates.reduce((s,f) => s + f.monthly, 0);
+
+  // iDeCo
+  const hasIdeco = isChecked('hasIdeco');
+  let idecoAssets = hasIdeco ? getVal('idecoBalance') : 0;
+  const idecoMonthly = hasIdeco ? getVal('idecoMonthly') : 0;
+  const idecoReturn = hasIdeco ? getVal('idecoReturn') / 100 : 0;
+  const idecoStartAge = hasIdeco ? getVal('idecoStartAge') : 99;
+  const idecoMethod = hasIdeco ? document.getElementById('idecoMethod').value : 'lump';
+
+  // 支出
+  const isDetailMode = isChecked('expenseDetailMode');
+  const livingCostBase = isDetailMode ? getExpenseCategoryTotal() : getVal('livingCost');
+  const funSaving = isDetailMode ? getVal('funSavingDetail') : getVal('funSaving');
+  const emergencyTarget = getVal('emergencyTarget');
+  const emergencyMonthly = getVal('emergencyMonthly');
+
+  // 車
+  const hasCar = isChecked('hasCar');
+  const carMonthly = hasCar ? getVal('carMonthly') : 0;
+  const carTax = hasCar ? getVal('carTax') : 0;
+  const carInspection = hasCar ? getVal('carInspection') : 0;
+  const carReplacement = hasCar ? getVal('carReplacement') : 0;
+  const carReplaceCycle = hasCar ? getVal('carReplaceCycle') : 99;
+  const carNextReplace = hasCar ? getVal('carNextReplace') : 999;
+
+  // 住宅ローン
+  const hasHome = isChecked('hasHomeLoan');
+  const homeLoanBalance = hasHome ? getVal('homeLoanBalance') : 0;
+  const homeLoanRate = getVal('homeLoanRate');
+  const homeLoanYears = getVal('homeLoanYears');
+  const hlmInput = document.getElementById('homeLoanMonthly').value;
+  const homeLoanMonthly = hlmInput ? parseFloat(hlmInput) : calcLoanMonthly(homeLoanBalance, homeLoanRate, homeLoanYears);
+  const homeLoanEndAge = myAge + homeLoanYears;
+
+  // その他ローン
+  const hasOther = isChecked('hasOtherLoan');
+  const otherLoanBalance = hasOther ? getVal('otherLoanBalance') : 0;
+  const otherLoanMonthly = calcLoanMonthly(otherLoanBalance, getVal('otherLoanRate'), getVal('otherLoanYears'));
+  const otherLoanEndAge = myAge + getVal('otherLoanYears');
+
+  // 子ども
+  const hasChild = isChecked('hasChild');
+  const childAge0 = getVal('childAge');
+
+  // 年収ステップをソート
+  const sortedSteps = [...incomeSteps].sort((a,b) => parseInt(a.age) - parseInt(b.age));
+
+  let emergencyFund = 0;
+  let idecoReceiving = false;
+  let idecoAnnualPayout = 0;
+  let myRetireBonusPaid = false;
+  let partnerRetireBonusPaid = false;
+
+  const labels = [], dataCash = [], dataInvest = [], dataIdeco = [], dataTotal = [], dataDrawdown = [], dataEmergency = [];
+  const rows = [];
+
+  for (let age = myAge; age <= endAge; age++) {
+    const year = age - myAge;
+    const pAge = partnerAge0 + year;
+    const cAge = hasChild ? childAge0 + year : -1;
+    const inflationMul = Math.pow(1 + inflationRate, year);
+
+    // --- 年収ステップ適用 ---
+    let myInc = myIncomeBase;
+    let partnerInc = partnerIncomeBase;
+    sortedSteps.forEach(s => {
+      if (parseInt(s.age) <= age) {
+        if (s.who === 'my' && s.amount) myInc = parseFloat(s.amount);
+        if (s.who === 'partner' && s.amount) partnerInc = parseFloat(s.amount);
+      }
+    });
+
+    // --- 収入 ---
+    let income = 0;
+    let pensionIncome = 0;
+    if (age < myRetire) {
+      income += (myInc + myBonus) * Math.pow(1 + raiseRate, year);
+    }
+    if (age >= myPensionStart) {
+      pensionIncome += myPensionAnnual;
+    }
+    if (pAge < partnerRetire) {
+      income += (partnerInc + partnerBonus) * Math.pow(1 + raiseRate, year);
+    }
+    if (pAge >= partnerPensionStart) {
+      pensionIncome += partnerPensionAnnual;
+    }
+
+    // 退職金
+    if (age === myRetire && !myRetireBonusPaid) {
+      cashAssets += myRetireBonus;
+      myRetireBonusPaid = true;
+    }
+    if (pAge === partnerRetire && !partnerRetireBonusPaid) {
+      cashAssets += partnerRetireBonus;
+      partnerRetireBonusPaid = true;
+    }
+
+    // 児童手当
+    let childAllowance = 0;
+    if (hasChild && cAge >= 0 && cAge < 15) {
+      childAllowance = childAllowanceMonthly(cAge) * 12;
+    }
+    income += childAllowance;
+
+    // --- 支出（インフレ考慮） ---
+    let expense = (livingCostBase * 12 + funSaving * 12) * inflationMul;
+
+    // 防衛資金積立
+    if (emergencyFund < emergencyTarget) {
+      const add = Math.min(emergencyMonthly * 12, emergencyTarget - emergencyFund);
+      expense += add;
+      emergencyFund += add;
+    }
+
+    // 保険料
+    // 保険料は生活費（総額 or カテゴリ合計）に含まれる
+
+    // 車
+    let carCost = 0;
+    if (hasCar) {
+      carCost += carMonthly * 12 * inflationMul + carTax;
+      if ((age - myAge) % 2 === 1) carCost += carInspection; // 車検2年毎
+    }
+
+    // 学費
+    let eduCost = 0;
+    if (hasChild && cAge >= 0) eduCost = getEduCost(cAge);
+
+    // ローン
+    let loanPayment = 0;
+    if (hasHome && age < homeLoanEndAge) loanPayment += homeLoanMonthly * 12;
+    if (hasOther && age < otherLoanEndAge) loanPayment += otherLoanMonthly * 12;
+
+    // --- 投資（ファンドごとに利回り計算、売却年対応） ---
+    let investGain = 0;
+    let investAssets = 0;
+    fundStates.forEach(f => {
+      if (f.sold) {
+        // 売却済み → 何もしない
+        investAssets += 0;
+        return;
+      }
+      // 売却年チェック（sellAfterYearsが設定され、その年数が経過したら売却→現金へ）
+      if (f.sellAfterYears !== null && year >= f.sellAfterYears) {
+        cashAssets += f.currentBalance;
+        f.sold = true;
+        f.currentBalance = 0;
+        investAssets += 0;
+        return;
+      }
+      const gain = f.currentBalance * f.returnRate;
+      investGain += gain;
+      f.currentBalance += gain + f.monthly * 12;
+      investAssets += f.currentBalance;
+    });
+
+    // --- iDeCo ---
+    let idecoGain = 0;
+    if (hasIdeco) {
+      if (age < 60) {
+        // 拠出期間: 運用 + 拠出
+        idecoGain = idecoAssets * idecoReturn;
+        idecoAssets += idecoGain + idecoMonthly * 12;
+      } else if (age < idecoStartAge) {
+        // 拠出停止、運用のみ
+        idecoGain = idecoAssets * idecoReturn;
+        idecoAssets += idecoGain;
+      } else {
+        // 受取開始
+        if (!idecoReceiving) {
+          idecoReceiving = true;
+          if (idecoMethod === 'lump') {
+            cashAssets += idecoAssets;
+            idecoAnnualPayout = 0;
+            idecoAssets = 0;
+          } else {
+            const payoutYears = idecoMethod === 'annuity10' ? 10 : 20;
+            idecoAnnualPayout = idecoAssets / payoutYears;
+          }
+        }
+        if (idecoMethod !== 'lump' && idecoAssets > 0) {
+          const payout = Math.min(idecoAnnualPayout, idecoAssets);
+          idecoAssets -= payout;
+          cashAssets += payout;
+          // 残額も運用
+          idecoGain = idecoAssets * idecoReturn;
+          idecoAssets += idecoGain;
+        }
+      }
+    }
+
+    // --- 車買い替え ---
+    let carReplaceCost = 0;
+    if (hasCar && age >= carNextReplace) {
+      if (age === carNextReplace || (age > carNextReplace && (age - carNextReplace) % carReplaceCycle === 0)) {
+        carReplaceCost = carReplacement;
+      }
+    }
+
+    // --- 家電買い替え ---
+    let applianceCost = 0;
+    appliances.forEach(a => {
+      const nxt = getApplianceNextAge(a);
+      const cyc = parseInt(a.cycle) || 99;
+      const cost = parseFloat(a.cost) || 0;
+      if (age >= nxt && cost > 0) {
+        if (age === nxt || (age > nxt && (age - nxt) % cyc === 0)) {
+          applianceCost += cost;
+        }
+      }
+    });
+
+    // --- イベント ---
+    let eventCost = 0;
+    let eventNames = [];
+    events.forEach(e => {
+      if (parseInt(e.age) === age && e.amount) {
+        eventCost += parseFloat(e.amount);
+        eventNames.push(e.name || '');
+      }
+    });
+
+    // --- 年間収支 ---
+    const totalIncome = income + pensionIncome;
+    const totalExpense = expense + carCost + eduCost + loanPayment + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0) + eventCost + carReplaceCost + applianceCost;
+    const annualBalance = totalIncome - totalExpense;
+    cashAssets += annualBalance;
+
+    // --- 現金が0以下→投資資産から切り崩し ---
+    let drawdown = 0;
+    let isDrawingDown = false;
+    if (cashAssets < 0) {
+      drawdown = -cashAssets; // 不足額
+      isDrawingDown = true;
+      // 投資ファンドから按分で切り崩し
+      const totalFundBalance = fundStates.reduce((s,f) => s + f.currentBalance, 0);
+      if (totalFundBalance + idecoAssets > 0) {
+        if (drawdown <= totalFundBalance) {
+          // 投資ファンドから切り崩し
+          const ratio = totalFundBalance > 0 ? drawdown / totalFundBalance : 0;
+          fundStates.forEach(f => { f.currentBalance -= f.currentBalance * ratio; });
+        } else {
+          // 投資ファンド全額 + iDeCoから不足分
+          const remaining = drawdown - totalFundBalance;
+          fundStates.forEach(f => { f.currentBalance = 0; });
+          idecoAssets = Math.max(0, idecoAssets - remaining);
+        }
+        cashAssets = 0;
+      }
+      // 全資産枯渇の場合はcashAssetsがマイナスのまま残る
+    }
+
+    investAssets = fundStates.reduce((s,f) => s + f.currentBalance, 0);
+    const totalAssets = cashAssets + emergencyFund + investAssets + idecoAssets;
+
+    labels.push(age);
+    dataCash.push(Math.round(cashAssets));
+    dataEmergency.push(Math.round(emergencyFund));
+    dataInvest.push(Math.round(investAssets));
+    dataIdeco.push(Math.round(idecoAssets));
+    dataTotal.push(Math.round(totalAssets));
+    dataDrawdown.push(isDrawingDown ? Math.round(drawdown) : 0);
+
+    rows.push({
+      age,
+      income: Math.round(income),
+      pension: Math.round(pensionIncome),
+      expense: Math.round(expense + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0)),
+      edu: Math.round(eduCost),
+      loan: Math.round(loanPayment),
+      car: Math.round(carCost + carReplaceCost),
+      appliance: Math.round(applianceCost),
+      eventCost: Math.round(eventCost),
+      eventNames: eventNames.join(', '),
+      investGain: Math.round(investGain),
+      idecoGain: Math.round(idecoGain),
+      drawdown: Math.round(drawdown),
+      annual: Math.round(annualBalance),
+      cash: Math.round(cashAssets),
+      emergency: Math.round(emergencyFund),
+      invest: Math.round(investAssets),
+      ideco: Math.round(idecoAssets),
+      total: Math.round(totalAssets)
+    });
+  }
+
+  renderChart(labels, dataCash, dataEmergency, dataInvest, dataIdeco, dataTotal, dataDrawdown, rows);
+  renderTable(rows);
+  renderSummary(rows);
+}
+
+function renderSummary(rows) {
+  const findAge = a => rows.find(r => r.age === a);
+  const r60 = findAge(60), r65 = findAge(65), r70 = findAge(70);
+  document.getElementById('sum60').textContent = r60 ? `${r60.total.toLocaleString()}万` : '-';
+  document.getElementById('sum60').style.color = r60 && r60.total >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sum65').textContent = r65 ? `${r65.total.toLocaleString()}万` : '-';
+  document.getElementById('sum65').style.color = r65 && r65.total >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sum70').textContent = r70 ? `${r70.total.toLocaleString()}万` : '-';
+  document.getElementById('sum70').style.color = r70 && r70.total >= 0 ? 'var(--green)' : 'var(--red)';
+
+  const depleteRow = rows.find(r => r.total < 0);
+  document.getElementById('sumDeplete').textContent = depleteRow ? `${depleteRow.age}歳` : '枯渇なし';
+  document.getElementById('sumDeplete').style.color = depleteRow ? 'var(--red)' : 'var(--green)';
+}
+
+function renderChart(labels, dataCash, dataEmergency, dataInvest, dataIdeco, dataTotal, dataDrawdown, rows) {
+  const ctx = document.getElementById('chart').getContext('2d');
+  if (chart) chart.destroy();
+
+  // 年間支出データ（ローン・学費・車・イベント含む）
+  const dataExpense = rows.map(r => Math.round(r.expense + r.edu + r.loan + r.car + r.appliance + r.eventCost));
+  // 年間収入データ（勤労収入 + 年金）
+  const dataIncome = rows.map(r => Math.round(r.income + r.pension));
+
+  // 切り崩し開始以降の背景を赤くハイライトするプラグイン
+  const drawdownZonePlugin = {
+    id: 'drawdownZone',
+    beforeDraw(chart) {
+      const dd = dataDrawdown || [];
+      const firstIdx = dd.findIndex(v => v > 0);
+      if (firstIdx < 0) return;
+      const xScale = chart.scales.x;
+      const area = chart.chartArea;
+      const ctx = chart.ctx;
+      const xStart = xScale.getPixelForValue(firstIdx);
+      ctx.save();
+      const grad = ctx.createLinearGradient(xStart, area.top, area.right, area.top);
+      grad.addColorStop(0, 'rgba(255,40,40,0.00)');
+      grad.addColorStop(0.15, 'rgba(255,40,40,0.10)');
+      grad.addColorStop(1, 'rgba(255,40,40,0.18)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(xStart, area.top, area.right - xStart, area.bottom - area.top);
+      ctx.restore();
+    }
+  };
+
+  // 0ラインプラグイン
+  const zeroLinePlugin = {
+    id: 'zeroLine',
+    afterDraw(chart) {
+      const yScale = chart.scales.y;
+      if (yScale.min < 0) {
+        const ctx = chart.ctx;
+        const y = yScale.getPixelForValue(0);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(248,113,113,0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        ctx.moveTo(chart.chartArea.left, y);
+        ctx.lineTo(chart.chartArea.right, y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  };
+
+  // 手動累積（下から: 防衛資金 → 現金 → 投資 → iDeCo）
+  const hasIdecoData = dataIdeco.some(v => v > 0);
+  const stackEmergency = dataEmergency.slice();
+  const stackCash = dataEmergency.map((v, i) => v + dataCash[i]);
+  const stackInvest = dataEmergency.map((v, i) => v + dataCash[i] + dataInvest[i]);
+  const stackTop = dataEmergency.map((v, i) => v + dataCash[i] + dataInvest[i] + dataIdeco[i]);
+
+  // Y軸の最大値をデータにフィットさせる（上に10%余白）
+  const allMax = Math.max(...stackTop, ...dataExpense);
+  const padded = allMax * 1.1;
+  let yStep;
+  if (padded <= 500) yStep = 100;
+  else if (padded <= 1000) yStep = 200;
+  else if (padded <= 2000) yStep = 500;
+  else if (padded <= 5000) yStep = 1000;
+  else if (padded <= 10000) yStep = 2000;
+  else if (padded <= 20000) yStep = 5000;
+  else yStep = Math.pow(10, Math.floor(Math.log10(padded / 5)));
+  const yMax = Math.ceil(padded / yStep) * yStep;
+
+  // 積み上げ面データセット: fill: '-1'で前のデータセットまで塗る（バンド方式）
+  // 配列順: 防衛資金(底) → 現金 → 投資 → iDeCo(上)
+  const stackedDatasets = [
+    {
+      label: '防衛資金', data: stackEmergency, borderColor: '#f59e0b', backgroundColor: 'rgba(217,152,11,0.7)',
+      fill: 'origin', borderWidth: 1.5, tension: 0.3, pointRadius: 0, pointHitRadius: 8
+    },
+    {
+      label: '現金', data: stackCash, borderColor: '#4ade80', backgroundColor: 'rgba(22,163,74,0.7)',
+      fill: '-1', borderWidth: 1.5, tension: 0.3, pointRadius: 0, pointHitRadius: 8
+    },
+    {
+      label: '投資', data: stackInvest, borderColor: '#60a5fa', backgroundColor: 'rgba(37,99,235,0.7)',
+      fill: '-1', borderWidth: 1.5, tension: 0.3, pointRadius: 0, pointHitRadius: 8
+    }
+  ];
+  if (hasIdecoData) {
+    stackedDatasets.push({
+      label: 'iDeCo', data: stackTop, borderColor: '#a78bfa', backgroundColor: 'rgba(124,58,237,0.7)',
+      fill: '-1', borderWidth: 1.5, tension: 0.3, pointRadius: 0, pointHitRadius: 8
+    });
+  }
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    plugins: [drawdownZonePlugin, zeroLinePlugin],
+    data: {
+      labels,
+      datasets: [
+        ...stackedDatasets,
+        {
+          label: '年間収入', data: dataIncome, borderColor: 'rgba(74,222,128,0.7)', backgroundColor: 'transparent',
+          fill: false, borderWidth: 1.5, borderDash: [6,3], tension: 0.3, pointRadius: 0, pointHitRadius: 8, order: 0,
+          yAxisID: 'yRight'
+        },
+        {
+          label: '年間支出', data: dataExpense, borderColor: 'rgba(248,113,113,0.7)', backgroundColor: 'transparent',
+          fill: false, borderWidth: 1.5, borderDash: [4,3], tension: 0.3, pointRadius: 0, pointHitRadius: 8, order: 0,
+          yAxisID: 'yRight'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#eee', font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(c) {
+              const i = c.dataIndex;
+              const map = { '現金': dataCash[i], '投資': dataInvest[i], 'iDeCo': dataIdeco[i], '防衛資金': dataEmergency[i], '年間収入': dataIncome[i], '年間支出': dataExpense[i] };
+              const val = map[c.dataset.label];
+              return val !== undefined ? `${c.dataset.label}: ${val.toLocaleString()}万円` : c.parsed.y.toLocaleString() + '万円';
+            },
+            afterBody: function(items) {
+              if (items.length === 0) return '';
+              const i = items[0].dataIndex;
+              const total = dataCash[i] + dataInvest[i] + dataIdeco[i] + dataEmergency[i];
+              return `─────────\n総資産: ${total.toLocaleString()}万円`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: '年齢', color: '#aaa' }, ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: {
+          min: Math.min(0, ...stackEmergency),
+          max: yMax,
+          ticks: { color: '#aaa', stepSize: yStep, callback: v => v.toLocaleString() },
+          title: { display: true, text: '万円', color: '#aaa' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        yRight: {
+          position: 'right',
+          min: 0,
+          max: Math.ceil(Math.max(...dataIncome, ...dataExpense) * 1.3 / 100) * 100,
+          ticks: { color: '#aaa', callback: v => v.toLocaleString() },
+          title: { display: true, text: '収支(万円)', color: '#aaa' },
+          grid: { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+}
+
+function renderTable(rows) {
+  const tbody = document.querySelector('#resultTable tbody');
+  tbody.innerHTML = rows.map(r => {
+    const cls = r.total < 0 ? 'negative' : '';
+    const ev = r.eventCost > 0 ? `${r.eventCost.toLocaleString()} (${r.eventNames})` : '-';
+    return `<tr class="${cls}">
+      <td>${r.age}</td><td>${r.income.toLocaleString()}</td><td>${r.pension > 0 ? r.pension.toLocaleString() : '-'}</td>
+      <td>${r.expense.toLocaleString()}</td><td>${r.edu > 0 ? r.edu.toLocaleString() : '-'}</td>
+      <td>${r.loan > 0 ? r.loan.toLocaleString() : '-'}</td>
+      <td>${r.car > 0 ? r.car.toLocaleString() : '-'}</td><td>${r.appliance > 0 ? r.appliance.toLocaleString() : '-'}</td><td>${ev}</td>
+      <td>${r.investGain.toLocaleString()}</td>
+      <td>${r.idecoGain.toLocaleString()}</td>
+      <td style="color:var(--red)">${r.drawdown > 0 ? '-' + r.drawdown.toLocaleString() : '-'}</td>
+      <td style="color:${r.annual>=0?'var(--green)':'var(--red)'}">${r.annual.toLocaleString()}</td>
+      <td>${r.cash.toLocaleString()}</td><td style="color:var(--yellow)">${r.emergency.toLocaleString()}</td><td style="color:#3b82f6">${r.invest.toLocaleString()}</td><td style="color:#8b5cf6">${r.ideco.toLocaleString()}</td>
+      <td style="font-weight:bold;color:${r.total>=0?'var(--green)':'var(--red)'}">${r.total.toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ====== UI操作 ======
+function toggleSection(h2) {
+  h2.classList.toggle('collapsed');
+  h2.nextElementSibling.classList.toggle('hidden');
+}
+
+// チェックボックス連動表示
+// 支出モード切替
+document.getElementById('expenseDetailMode').addEventListener('change', function() {
+  document.getElementById('expenseSimpleFields').style.display = this.checked ? 'none' : '';
+  document.getElementById('expenseDetailFields').style.display = this.checked ? '' : 'none';
+  if (this.checked && expenseCategories.length === 0) {
+    initDefaultCategories();
+  }
+  simulate();
+});
+
+const toggleMap = {
+  hasHomeLoan: 'homeLoanFields', hasOtherLoan: 'otherLoanFields',
+  hasChild: 'childFields', hasCar: 'carFields', hasIdeco: 'idecoFields',
+  myPensionManual: 'myPensionManualFields', partnerPensionManual: 'partnerPensionManualFields'
+};
+Object.keys(toggleMap).forEach(cbId => {
+  const el = document.getElementById(cbId);
+  if (el) el.addEventListener('change', function() {
+    document.getElementById(toggleMap[cbId]).style.display = this.checked ? '' : 'none';
+  });
+});
+
+// ====== 保存/読込 ======
+function getAllInputValues() {
+  const inputs = {};
+  document.querySelectorAll('input[id], select[id]').forEach(el => {
+    if (el.type === 'checkbox') inputs[el.id] = el.checked;
+    else inputs[el.id] = el.value;
+  });
+  inputs._events = events.map(e => ({ age: e.age, name: e.name, amount: e.amount }));
+  inputs._incomeSteps = incomeSteps.map(s => ({ age: s.age, who: s.who, amount: s.amount }));
+  inputs._funds = {};
+  ['rakuten','sbi','other'].forEach(b => {
+    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, sellAfterYears: f.sellAfterYears || '' }));
+  });
+  inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
+  inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
+  inputs._bankAccountsMy = bankAccountsMy.map(a => ({ name: a.name, balance: a.balance }));
+  inputs._bankAccountsPartner = bankAccountsPartner.map(a => ({ name: a.name, balance: a.balance }));
+  return inputs;
+}
+
+function setAllInputValues(data) {
+  Object.keys(data).forEach(key => {
+    if (key.startsWith('_')) return;
+    const el = document.getElementById(key);
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      el.checked = data[key];
+      el.dispatchEvent(new Event('change'));
+    } else {
+      el.value = data[key];
+    }
+  });
+  if (data._events) {
+    events = data._events.map(e => ({ ...e, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderEvents();
+  }
+  if (data._incomeSteps) {
+    incomeSteps = data._incomeSteps.map(s => ({ ...s, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderIncomeSteps();
+  }
+  if (data._funds) {
+    ['rakuten','sbi','other'].forEach(b => {
+      if (data._funds[b]) {
+        funds[b] = data._funds[b].map(f => ({ ...f, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+        renderFunds(b);
+      }
+    });
+  }
+  if (data._expenseCategories) {
+    expenseCategories = data._expenseCategories.map(c => ({ ...c, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderExpenseCategories();
+  }
+  if (data._appliances) {
+    appliances = data._appliances.map(a => ({ ...a, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderAppliances();
+  }
+  if (data._bankAccountsMy) {
+    bankAccountsMy = data._bankAccountsMy.map(a => ({ ...a, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+  } else if (data._bankAccounts) {
+    bankAccountsMy = data._bankAccounts.map(a => ({ ...a, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+  }
+  if (data._bankAccountsPartner) {
+    bankAccountsPartner = data._bankAccountsPartner.map(a => ({ ...a, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+  }
+  renderBankAccounts();
+}
+
+function saveToLocal() {
+  localStorage.setItem('lifePlanData_v3', JSON.stringify(getAllInputValues()));
+  showToast('保存しました');
+}
+function loadFromLocal() {
+  const data = localStorage.getItem('lifePlanData_v3');
+  if (data) { setAllInputValues(JSON.parse(data)); simulate(); showToast('読み込みました'); }
+  else showToast('保存データがありません');
+}
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(getAllInputValues(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = `lifeplan_${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('エクスポートしました');
+}
+function importJSON() { document.getElementById('fileInput').click(); }
+function handleFileImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try { setAllInputValues(JSON.parse(ev.target.result)); simulate(); showToast('インポートしました'); }
+    catch(err) { showToast('JSON読み込みに失敗'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ====== 自動再計算 ======
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+const debouncedSimulate = debounce(() => simulate(), 300);
+
+document.querySelectorAll('input, select').forEach(el => {
+  el.addEventListener('change', () => simulate());
+  if (el.type === 'number' || el.type === 'text') el.addEventListener('input', debouncedSimulate);
+});
+
+// ====== 初回 ======
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('lifePlanData_v3');
+  if (saved) {
+    try { setAllInputValues(JSON.parse(saved)); } catch(e) {}
+  }
+  renderAppliances();
+  renderBankAccounts();
+  // 初期ファンドがなければサンプルを追加
+  if (funds.rakuten.length === 0 && funds.sbi.length === 0 && funds.other.length === 0) {
+    addFund('rakuten', 'S&P500', 50, 2, 8.0);
+    addFund('rakuten', 'オルカン', 30, 1, 7.0);
+    addFund('rakuten', 'GOLD', 20, 0.5, 5.0);
+    addFund('sbi', 'NASDAQ100', 30, 1.5, 10.0);
+    addFund('sbi', 'インドNifty50', 20, 0.5, 9.0);
+  }
+  simulate();
+});
+</script>
+
+</body>
+</html>
