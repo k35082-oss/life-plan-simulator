@@ -360,7 +360,6 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
     <div id="expenseSimpleFields">
       <div class="row">
         <div class="field"><label>生活費合計（保険含む）<span class="unit">万円/月</span></label><input type="number" id="livingCost" value="25" step="1"></div>
-        <div class="field"><label>旅行・家電積立<span class="unit">万円/月</span></label><input type="number" id="funSaving" value="3" step="0.5"></div>
       </div>
     </div>
 
@@ -371,9 +370,6 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
       <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
         <button class="btn-small btn-add" onclick="addExpenseCategory()">+ 項目追加</button>
         <span class="info-box" id="expenseCategoryTotal" style="margin:0;padding:2px 10px;font-size:0.82em;font-weight:bold">合計: -</span>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div class="field"><label>旅行・家電積立<span class="unit">万円/月</span></label><input type="number" id="funSavingDetail" value="3" step="0.5"></div>
       </div>
     </div>
 
@@ -404,6 +400,11 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
     <h3>家電買い替え</h3>
     <div id="applianceList"></div>
     <button class="btn-small btn-add" onclick="addAppliance()">+ 家電追加</button>
+
+    <h3>旅行</h3>
+    <div class="info-box">旅行の費用と頻度を設定。年1回なら「1年おき」、隔年なら「2年おき」に設定。</div>
+    <div id="travelList"></div>
+    <button class="btn-small btn-add" onclick="addTravel()">+ 旅行追加</button>
   </div>
 </div>
 
@@ -455,30 +456,13 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
       <label for="hasChild">子どもあり</label>
     </div>
     <div id="childFields">
-      <div class="row">
-        <div class="field field-narrow"><label>現在の年齢</label><input type="number" id="childAge" value="3" min="0" max="22"></div>
+      <div class="info-box">児童手当（2024年10月〜）: 所得制限なし。0〜2歳 月1.5万、3歳〜高校生 月1万。第3子以降は全年齢 月3万。22歳年度末までカウント対象。</div>
+      <div id="childrenContainer"></div>
+      <div style="margin-top:8px">
+        <button class="btn-small btn-add" onclick="addChild()">+ 子ども追加</button>
+        <span style="font-size:0.75em;color:var(--muted);margin-left:8px">最大5人</span>
       </div>
-      <div class="row">
-        <div class="field"><label>小学校</label>
-          <select id="eduElementary"><option value="public">公立（35万/年）</option><option value="private">私立（167万/年）</option></select>
-        </div>
-        <div class="field"><label>中学校</label>
-          <select id="eduMiddle"><option value="public">公立（54万/年）</option><option value="private">私立（144万/年）</option></select>
-        </div>
-      </div>
-      <div class="row">
-        <div class="field"><label>高校</label>
-          <select id="eduHigh"><option value="public">公立（51万/年）</option><option value="private">私立（105万/年）</option></select>
-        </div>
-        <div class="field"><label>大学</label>
-          <select id="eduUniv">
-            <option value="public">国公立（70万/年）</option>
-            <option value="private_arts">私立文系（120万/年）</option>
-            <option value="private_sci">私立理系（170万/年）</option>
-          </select>
-        </div>
-      </div>
-      <div class="info-box" id="childAllowanceInfo">児童手当: 0〜2歳 月1.5万、3歳〜小学校 月1万（第3子以降1.5万）、中学 月1万を自動計算</div>
+      <div class="info-box" id="childAllowanceSummary" style="margin-top:8px"></div>
     </div>
   </div>
 </div>
@@ -529,21 +513,222 @@ const EDU_COST = {
   univ:       { public: 70, private_arts: 120, private_sci: 170 }
 };
 
-// 児童手当 (万円/月) — 2024年拡充後
-function childAllowanceMonthly(childAge) {
-  if (childAge < 0 || childAge >= 15) return 0; // 中学卒業まで
-  if (childAge < 3) return 1.5;  // 0-2歳
-  return 1.0; // 3歳〜中学
+// ====== 子ども管理（最大5人） ======
+let children = [
+  { id: 1, name: '第1子', age: 3, eduElementary: 'public', eduMiddle: 'public', eduHigh: 'public', eduUniv: 'public', lessons: { elementary: [], middle: [], high: [], univ: [] } }
+];
+
+function addChild() {
+  if (children.length >= 5) return;
+  const n = children.length + 1;
+  children.push({
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000),
+    name: `第${n}子`, age: 0,
+    eduElementary: 'public', eduMiddle: 'public', eduHigh: 'public', eduUniv: 'public',
+    lessons: { elementary: [], middle: [], high: [], univ: [] }
+  });
+  renderChildren();
+  simulate();
 }
 
-// 学費
-function getEduCost(childAge) {
-  if (childAge >= 6 && childAge <= 11) return EDU_COST.elementary[document.getElementById('eduElementary').value] || 0;
-  if (childAge >= 12 && childAge <= 14) return EDU_COST.middle[document.getElementById('eduMiddle').value] || 0;
-  if (childAge >= 15 && childAge <= 17) return EDU_COST.high[document.getElementById('eduHigh').value] || 0;
-  if (childAge >= 18 && childAge <= 21) return EDU_COST.univ[document.getElementById('eduUniv').value] || 0;
-  return 0;
+function removeChild(id) {
+  children = children.filter(c => c.id !== id);
+  renderChildren();
+  simulate();
 }
+
+function updateChild(id, key, value) {
+  const c = children.find(e => e.id === id);
+  if (c) c[key] = value;
+  simulate();
+}
+
+function addChildLesson(childId, stage, name='', monthly='', activeGrades=null) {
+  const c = children.find(e => e.id === childId);
+  if (!c) return;
+  const stageGrades = LESSON_STAGES[stage].grades;
+  if (!activeGrades) activeGrades = stageGrades.map(g => g.age);
+  c.lessons[stage].push({
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000),
+    name, monthly, activeGrades
+  });
+  renderChildren();
+  simulate();
+}
+
+function removeChildLesson(childId, stage, lessonId) {
+  const c = children.find(e => e.id === childId);
+  if (!c) return;
+  c.lessons[stage] = c.lessons[stage].filter(l => l.id !== lessonId);
+  renderChildren();
+  simulate();
+}
+
+function updateChildLesson(childId, stage, lessonId, key, value) {
+  const c = children.find(e => e.id === childId);
+  if (!c) return;
+  const l = c.lessons[stage].find(e => e.id === lessonId);
+  if (l) l[key] = value;
+  simulate();
+}
+
+function toggleChildLessonGrade(childId, stage, lessonId, age) {
+  const c = children.find(e => e.id === childId);
+  if (!c) return;
+  const l = c.lessons[stage].find(e => e.id === lessonId);
+  if (!l) return;
+  const idx = l.activeGrades.indexOf(age);
+  if (idx >= 0) l.activeGrades.splice(idx, 1);
+  else l.activeGrades.push(age);
+  renderChildren();
+  simulate();
+}
+
+function renderChildLessons(child, stage) {
+  const grades = LESSON_STAGES[stage].grades;
+  return child.lessons[stage].map(l => `
+    <div style="margin:4px 0;padding:4px 6px;background:rgba(255,255,255,0.03);border-radius:4px">
+      <div style="display:flex;gap:6px;align-items:end">
+        <div class="field" style="flex:1;min-width:80px"><label style="font-size:0.7em">習い事名</label><input type="text" value="${l.name}" oninput="updateChildLesson(${child.id},'${stage}',${l.id},'name',this.value)" placeholder="例: 塾、水泳" style="font-size:0.82em"></div>
+        <div class="field" style="width:90px"><label style="font-size:0.7em">月額<span class="unit">万円</span></label><input type="number" value="${l.monthly}" step="0.1" min="0" oninput="updateChildLesson(${child.id},'${stage}',${l.id},'monthly',this.value)" placeholder="万円/月" style="font-size:0.82em"></div>
+        <button class="btn-small btn-danger" onclick="removeChildLesson(${child.id},'${stage}',${l.id})" style="font-size:0.7em;padding:2px 6px">削除</button>
+      </div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:3px;align-items:center">
+        <span style="font-size:0.7em;color:var(--muted);white-space:nowrap" title="費用がかかる学年をON（色付き）にしてください">履修期間:</span>
+        ${grades.map(g => `
+          <label style="font-size:0.7em;cursor:pointer;padding:1px 4px;border-radius:3px;background:${l.activeGrades.includes(g.age) ? 'var(--accent)' : 'rgba(255,255,255,0.08)'};color:${l.activeGrades.includes(g.age) ? '#fff' : 'var(--muted)'}">
+            <input type="checkbox" ${l.activeGrades.includes(g.age) ? 'checked' : ''} onchange="toggleChildLessonGrade(${child.id},'${stage}',${l.id},${g.age})" style="display:none">
+            ${g.label}
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderEduStage(child, stage, label, ageRange, options) {
+  const selectHTML = options.map(o => `<option value="${o.value}" ${child['edu' + stage.charAt(0).toUpperCase() + stage.slice(1)] === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
+  const stageKey = stage.charAt(0).toUpperCase() + stage.slice(1);
+  return `
+    <div style="border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+        <span style="font-size:0.82em;font-weight:bold;color:var(--accent2)">${label}（${ageRange}）</span>
+        <select onchange="updateChild(${child.id},'edu${stageKey}',this.value)" style="font-size:0.8em">${selectHTML}</select>
+      </div>
+      ${renderChildLessons(child, stage)}
+      <button class="btn-small btn-add" onclick="addChildLesson(${child.id},'${stage}')" style="font-size:0.72em;margin-top:2px">+ 習い事</button>
+    </div>`;
+}
+
+function renderChildren() {
+  const container = document.getElementById('childrenContainer');
+  if (!container) return;
+  container.innerHTML = children.map((c, idx) => `
+    <div style="border:1px solid var(--accent2);border-radius:8px;padding:10px;margin-bottom:10px;position:relative">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+        <input type="text" value="${c.name}" onchange="updateChild(${c.id},'name',this.value)" style="width:80px;font-weight:bold;font-size:0.9em;background:transparent;border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--fg)">
+        <div class="field" style="width:100px;margin:0"><label style="font-size:0.75em">現在の年齢</label><input type="number" value="${c.age}" min="0" max="22" oninput="updateChild(${c.id},'age',parseInt(this.value)||0);renderChildren()"></div>
+        ${children.length > 1 ? `<button class="btn-small btn-danger" onclick="removeChild(${c.id})" style="font-size:0.75em">削除</button>` : ''}
+      </div>
+      ${renderEduStage(c, 'elementary', '小学校', '6〜11歳', [
+        {value:'public', label:'公立（35万/年）'}, {value:'private', label:'私立（167万/年）'}
+      ])}
+      ${renderEduStage(c, 'middle', '中学校', '12〜14歳', [
+        {value:'public', label:'公立（54万/年）'}, {value:'private', label:'私立（144万/年）'}
+      ])}
+      ${renderEduStage(c, 'high', '高校', '15〜17歳', [
+        {value:'public', label:'公立（51万/年）'}, {value:'private', label:'私立（105万/年）'}
+      ])}
+      ${renderEduStage(c, 'univ', '大学', '18〜21歳', [
+        {value:'public', label:'国公立（70万/年）'}, {value:'private_arts', label:'私立文系（120万/年）'}, {value:'private_sci', label:'私立理系（170万/年）'}
+      ])}
+    </div>
+  `).join('');
+}
+
+// 児童手当 (2024年10月〜 所得制限撤廃)
+// 第1子・第2子: 0-2歳 1.5万/月、3歳〜高校生(18歳年度末) 1.0万/月
+// 第3子以降: 全年齢 3.0万/月
+// カウント対象: 22歳年度末まで
+function calcChildAllowance(childrenList, yearOffset) {
+  let total = 0;
+  // 各子の「その年の年齢」を計算し、22歳以下をカウント対象に含める
+  const ages = childrenList.map(c => c.age + yearOffset).sort((a, b) => b - a); // 年長順
+  // 22歳以下の子をカウント（第何子かの判定用）
+  const countableAges = ages.filter(a => a >= 0 && a <= 22);
+
+  childrenList.forEach(c => {
+    const cAge = c.age + yearOffset;
+    if (cAge < 0 || cAge > 18) return; // 支給対象: 0歳〜18歳(高校生年代)
+
+    // この子が第何子か（22歳以下の子の中での順番、年長順）
+    const rank = countableAges.filter(a => a > cAge).length + 1;
+    // 同い年が複数いる場合の調整
+    const sameAgesBefore = childrenList.filter(c2 => c2.age + yearOffset === cAge && c2.id < c.id).length;
+    const finalRank = rank + sameAgesBefore;
+
+    if (finalRank >= 3) {
+      // 第3子以降: 全年齢 3.0万/月
+      total += 3.0 * 12;
+    } else if (cAge <= 2) {
+      // 第1子・第2子: 0-2歳 1.5万/月
+      total += 1.5 * 12;
+    } else {
+      // 第1子・第2子: 3歳〜高校生 1.0万/月
+      total += 1.0 * 12;
+    }
+  });
+  return total;
+}
+
+// 学費（1人分）
+function getEduCostForChild(child, yearOffset) {
+  const cAge = child.age + yearOffset;
+  let cost = 0;
+  if (cAge >= 6 && cAge <= 11) cost = EDU_COST.elementary[child.eduElementary] || 0;
+  else if (cAge >= 12 && cAge <= 14) cost = EDU_COST.middle[child.eduMiddle] || 0;
+  else if (cAge >= 15 && cAge <= 17) cost = EDU_COST.high[child.eduHigh] || 0;
+  else if (cAge >= 18 && cAge <= 21) cost = EDU_COST.univ[child.eduUniv] || 0;
+  // 習い事
+  for (const stage of Object.keys(child.lessons)) {
+    for (const l of child.lessons[stage]) {
+      if (l.activeGrades.includes(cAge)) {
+        cost += (parseFloat(l.monthly) || 0) * 12;
+      }
+    }
+  }
+  return cost;
+}
+
+// 全子どもの学費合計
+function getTotalEduCost(yearOffset) {
+  return children.reduce((s, c) => s + getEduCostForChild(c, yearOffset), 0);
+}
+
+// 全子どもの児童手当合計
+function getTotalChildAllowance(yearOffset) {
+  return calcChildAllowance(children, yearOffset);
+}
+
+// ====== 習い事管理 ======
+// 各ステージの学年定義: { stage: ステージ名, grades: [{ label, childAge }] }
+const LESSON_STAGES = {
+  elementary: { label: '小学校', grades: [
+    { label: '小1', age: 6 }, { label: '小2', age: 7 }, { label: '小3', age: 8 },
+    { label: '小4', age: 9 }, { label: '小5', age: 10 }, { label: '小6', age: 11 }
+  ]},
+  middle: { label: '中学校', grades: [
+    { label: '中1', age: 12 }, { label: '中2', age: 13 }, { label: '中3', age: 14 }
+  ]},
+  high: { label: '高校', grades: [
+    { label: '高1', age: 15 }, { label: '高2', age: 16 }, { label: '高3', age: 17 }
+  ]},
+  univ: { label: '大学', grades: [
+    { label: '大1', age: 18 }, { label: '大2', age: 19 }, { label: '大3', age: 20 }, { label: '大4', age: 21 }
+  ]}
+};
+
+// (旧lessons系関数は子ども個別管理に移行済み)
 
 // ====== 年金計算（日本の公的年金 簡易推計） ======
 // 参考: https://nenkin-shisan.mhlw.go.jp/
@@ -755,6 +940,46 @@ function updateAppliance(id, key, value) {
       if (span) span.textContent = '次回: ' + getApplianceNextAge(a) + '歳';
     }
   }
+}
+
+// ====== 旅行管理 ======
+let travels = [
+  { id: 1, name: '家族旅行（国内）', cost: 15, frequency: 1 },
+];
+function addTravel(name='', cost='', frequency=1) {
+  travels.push({ id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, cost, frequency });
+  renderTravels(); simulate();
+}
+function removeTravel(id) {
+  travels = travels.filter(t => t.id !== id);
+  renderTravels(); simulate();
+}
+function updateTravel(id, key, value) {
+  const t = travels.find(e => e.id === id);
+  if (t) t[key] = value;
+  simulate();
+}
+function renderTravels() {
+  const container = document.getElementById('travelList');
+  if (!container) return;
+  container.innerHTML = travels.map(t => `
+    <div class="event-row" data-id="${t.id}">
+      <div class="field" style="flex:1;min-width:120px"><label>タイトル</label><input type="text" value="${t.name}" oninput="updateTravel(${t.id},'name',this.value)" placeholder="例: 家族旅行"></div>
+      <div class="field field-narrow"><label>費用<span class="unit">万円</span></label><input type="number" value="${t.cost}" step="1" min="0" oninput="updateTravel(${t.id},'cost',this.value)"></div>
+      <div class="field field-narrow"><label>頻度<span class="unit">年おき</span></label><input type="number" value="${t.frequency}" step="1" min="1" max="10" oninput="updateTravel(${t.id},'frequency',this.value)"></div>
+      <button class="btn-small btn-danger" onclick="removeTravel(${t.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+}
+function getTravelCost(yearOffset) {
+  let total = 0;
+  travels.forEach(t => {
+    const freq = parseInt(t.frequency) || 1;
+    if (yearOffset % freq === 0) {
+      total += parseFloat(t.cost) || 0;
+    }
+  });
+  return total;
 }
 
 // ====== 支出カテゴリ管理 ======
@@ -1022,7 +1247,7 @@ function simulate() {
   // 支出
   const isDetailMode = isChecked('expenseDetailMode');
   const livingCostBase = isDetailMode ? getExpenseCategoryTotal() : getVal('livingCost');
-  const funSaving = isDetailMode ? getVal('funSavingDetail') : getVal('funSaving');
+  // funSaving廃止 → 旅行セクションに移行
   const emergencyTarget = getVal('emergencyTarget');
   const emergencyMonthly = getVal('emergencyMonthly');
 
@@ -1052,7 +1277,6 @@ function simulate() {
 
   // 子ども
   const hasChild = isChecked('hasChild');
-  const childAge0 = getVal('childAge');
 
   // 年収ステップをソート
   const sortedSteps = [...incomeSteps].sort((a,b) => parseInt(a.age) - parseInt(b.age));
@@ -1069,7 +1293,6 @@ function simulate() {
   for (let age = myAge; age <= endAge; age++) {
     const year = age - myAge;
     const pAge = partnerAge0 + year;
-    const cAge = hasChild ? childAge0 + year : -1;
     const inflationMul = Math.pow(1 + inflationRate, year);
 
     // --- 年収ステップ適用 ---
@@ -1108,15 +1331,17 @@ function simulate() {
       partnerRetireBonusPaid = true;
     }
 
-    // 児童手当
+    // 児童手当（2024年10月〜 全子ども対象、所得制限なし）
     let childAllowance = 0;
-    if (hasChild && cAge >= 0 && cAge < 15) {
-      childAllowance = childAllowanceMonthly(cAge) * 12;
+    if (hasChild) {
+      childAllowance = getTotalChildAllowance(year);
     }
     income += childAllowance;
 
     // --- 支出（インフレ考慮） ---
-    let expense = (livingCostBase * 12 + funSaving * 12) * inflationMul;
+    let expense = (livingCostBase * 12) * inflationMul;
+    // 旅行費用（頻度に応じて該当年のみ加算、インフレ考慮）
+    const travelCost = getTravelCost(year) * inflationMul;
 
     // 防衛資金積立
     if (emergencyFund < emergencyTarget) {
@@ -1135,9 +1360,9 @@ function simulate() {
       if ((age - myAge) % 2 === 1) carCost += carInspection; // 車検2年毎
     }
 
-    // 学費
+    // 学費（全子どもの合計）
     let eduCost = 0;
-    if (hasChild && cAge >= 0) eduCost = getEduCost(cAge);
+    if (hasChild) eduCost = getTotalEduCost(year);
 
     // ローン
     let loanPayment = 0;
@@ -1235,7 +1460,7 @@ function simulate() {
 
     // --- 年間収支 ---
     const totalIncome = income + pensionIncome;
-    const totalExpense = expense + carCost + eduCost + loanPayment + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0) + eventCost + carReplaceCost + applianceCost;
+    const totalExpense = expense + carCost + eduCost + loanPayment + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0) + eventCost + carReplaceCost + applianceCost + travelCost;
     const annualBalance = totalIncome - totalExpense;
     cashAssets += annualBalance;
 
@@ -1539,6 +1764,18 @@ function getAllInputValues() {
   });
   inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
   inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
+  inputs._travels = travels.map(t => ({ name: t.name, cost: t.cost, frequency: t.frequency }));
+  inputs._children = children.map(c => ({
+    name: c.name, age: c.age,
+    eduElementary: c.eduElementary, eduMiddle: c.eduMiddle,
+    eduHigh: c.eduHigh, eduUniv: c.eduUniv,
+    lessons: {}
+  }));
+  inputs._children.forEach((sc, i) => {
+    ['elementary','middle','high','univ'].forEach(s => {
+      sc.lessons[s] = children[i].lessons[s].map(l => ({ name: l.name, monthly: l.monthly, activeGrades: l.activeGrades }));
+    });
+  });
   inputs._bankAccountsMy = bankAccountsMy.map(a => ({ name: a.name, balance: a.balance }));
   inputs._bankAccountsPartner = bankAccountsPartner.map(a => ({ name: a.name, balance: a.balance }));
   return inputs;
@@ -1579,6 +1816,25 @@ function setAllInputValues(data) {
   if (data._appliances) {
     appliances = data._appliances.map(a => ({ ...a, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
     renderAppliances();
+  }
+  if (data._travels) {
+    travels = data._travels.map(t => ({ ...t, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderTravels();
+  }
+  if (data._children) {
+    children = data._children.map(c => {
+      const child = {
+        ...c, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000),
+        lessons: { elementary: [], middle: [], high: [], univ: [] }
+      };
+      ['elementary','middle','high','univ'].forEach(s => {
+        if (c.lessons && c.lessons[s]) {
+          child.lessons[s] = c.lessons[s].map(l => ({ ...l, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+        }
+      });
+      return child;
+    });
+    renderChildren();
   }
   if (data._bankAccountsMy) {
     bankAccountsMy = data._bankAccountsMy.map(a => ({ ...a, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
@@ -1646,7 +1902,9 @@ window.addEventListener('DOMContentLoaded', () => {
     try { setAllInputValues(JSON.parse(saved)); } catch(e) {}
   }
   renderAppliances();
+  renderTravels();
   renderBankAccounts();
+  renderChildren();
   // 初期ファンドがなければサンプルを追加
   if (funds.rakuten.length === 0 && funds.sbi.length === 0 && funds.other.length === 0) {
     addFund('rakuten', 'S&P500', 50, 2, 8.0);
