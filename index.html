@@ -307,6 +307,16 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
       <button class="btn-small btn-add" onclick="addFund('other')">+ ファンド追加</button>
     </div>
 
+    <div id="futureFundSection" class="broker-section" style="margin-top:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">将来購入予定ファンド</b>
+        <span class="info-box" id="futureFundTotal" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div class="info-box" style="font-size:0.8em;margin-bottom:6px">将来購入する予定のファンドを登録できます。「購入」に年数を入れると、その年数後に購入を開始します。配当金は購入後から売却まで毎年現金に加算されます。</div>
+      <div id="futureFundList"></div>
+      <button class="btn-small btn-add" onclick="addFutureFund()">+ 将来ファンド追加</button>
+    </div>
+
     <h3>iDeCo（個人型確定拠出年金）</h3>
     <div class="checkbox-row">
       <input type="checkbox" id="hasIdeco" checked>
@@ -1053,6 +1063,7 @@ const FUND_PRESETS = {
 };
 
 let funds = { rakuten: [], sbi: [], other: [] };
+let futureFunds = [];
 
 function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='', accountType='nisa', dividendRate='') {
   funds[broker].push({
@@ -1158,6 +1169,107 @@ function getAllFundsFlat() {
   return all;
 }
 
+// ====== 将来購入予定ファンド ======
+function addFutureFund(name='', balance='', monthly='', returnRate='', dividendRate='', buyAfterYears='', sellAfterYears='', accountType='nisa') {
+  futureFunds.push({
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, dividendRate, buyAfterYears, sellAfterYears, accountType
+  });
+  renderFutureFunds();
+}
+function removeFutureFund(id) {
+  futureFunds = futureFunds.filter(f => f.id !== id);
+  renderFutureFunds();
+}
+function updateFutureFund(id, key, value) {
+  const f = futureFunds.find(f => f.id === id);
+  if (f) f[key] = value;
+  if (key === 'name' && FUND_PRESETS[value] !== undefined) {
+    const fnd = futureFunds.find(f => f.id === id);
+    if (fnd && !fnd.returnRate) {
+      fnd.returnRate = FUND_PRESETS[value];
+      renderFutureFunds();
+    }
+  }
+  updateFutureFundTotal();
+}
+function renderFutureFunds() {
+  const presetOptions = Object.keys(FUND_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('');
+  document.getElementById('futureFundList').innerHTML = futureFunds.map(f => `
+    <div class="event-row" style="align-items:end">
+      <div class="field" style="min-width:120px"><label>ファンド名</label>
+        <input type="text" value="${f.name}" list="fundPresets"
+          oninput="updateFutureFund(${f.id},'name',this.value)"
+          onchange="updateFutureFund(${f.id},'name',this.value)">
+      </div>
+      <div class="field field-narrow"><label>金額<span class="unit">万円</span></label>
+        <input type="number" value="${f.balance}" step="5" min="0"
+          oninput="updateFutureFund(${f.id},'balance',this.value)"
+          onchange="updateFutureFund(${f.id},'balance',this.value)">
+      </div>
+      <div class="field field-narrow"><label>積立<span class="unit">万/月</span></label>
+        <input type="number" value="${f.monthly}" step="0.5" min="0"
+          oninput="updateFutureFund(${f.id},'monthly',this.value)"
+          onchange="updateFutureFund(${f.id},'monthly',this.value)">
+      </div>
+      <div class="field field-narrow"><label>複利利回り<span class="unit">%/年</span></label>
+        <input type="number" value="${f.returnRate}" step="0.5" min="0" max="30"
+          oninput="updateFutureFund(${f.id},'returnRate',this.value)"
+          onchange="updateFutureFund(${f.id},'returnRate',this.value)">
+      </div>
+      <div class="field field-narrow"><label>配当利回り<span class="unit">%/年</span></label>
+        <input type="number" value="${f.dividendRate || ''}" step="0.1" min="0" max="30" placeholder="0"
+          oninput="updateFutureFund(${f.id},'dividendRate',this.value)"
+          onchange="updateFutureFund(${f.id},'dividendRate',this.value)">
+      </div>
+      <div class="field field-narrow"><label>購入<span class="unit">年後</span></label>
+        <input type="number" value="${f.buyAfterYears}" step="1" min="1" max="50" placeholder="年後"
+          oninput="updateFutureFund(${f.id},'buyAfterYears',this.value)"
+          onchange="updateFutureFund(${f.id},'buyAfterYears',this.value)">
+      </div>
+      <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
+        <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
+          oninput="updateFutureFund(${f.id},'sellAfterYears',this.value)"
+          onchange="updateFutureFund(${f.id},'sellAfterYears',this.value)">
+      </div>
+      <div class="field field-narrow"><label>口座</label>
+        <select onchange="updateFutureFund(${f.id},'accountType',this.value)" style="font-size:0.82em">
+          <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
+          <option value="tokutei" ${f.accountType==='tokutei'?'selected':''}>特定口座</option>
+          <option value="ippan" ${f.accountType==='ippan'?'selected':''}>一般口座</option>
+        </select>
+      </div>
+      <button class="btn-small btn-danger" onclick="removeFutureFund(${f.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+  updateFutureFundTotal();
+}
+function updateFutureFundTotal() {
+  const total = futureFunds.reduce((s,f) => s + (parseFloat(f.balance)||0), 0);
+  const monthly = futureFunds.reduce((s,f) => s + (parseFloat(f.monthly)||0), 0);
+  const dividend = futureFunds.reduce((s,f) => {
+    const bal = parseFloat(f.balance) || 0;
+    const divRate = (parseFloat(f.dividendRate) || 0) / 100;
+    if (divRate <= 0) return s;
+    const grossDiv = bal * divRate;
+    const acct = f.accountType || 'nisa';
+    return s + (acct === 'nisa' ? grossDiv : grossDiv * (1 - 0.20315));
+  }, 0);
+  const el = document.getElementById('futureFundTotal');
+  if (el) el.textContent = `予定額: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
+}
+function getFutureFundsFlat() {
+  return futureFunds.map(f => ({
+    balance: parseFloat(f.balance) || 0,
+    monthly: parseFloat(f.monthly) || 0,
+    returnRate: (parseFloat(f.returnRate) || 0) / 100,
+    dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
+    buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
+    sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+    accountType: f.accountType || 'nisa',
+    totalContribution: parseFloat(f.balance) || 0
+  }));
+}
+
 // ====== 年収ステップ変更 ======
 let incomeSteps = [];
 function addIncomeStep(age='', who='my', amount='') {
@@ -1258,7 +1370,10 @@ function simulate() {
   // 資産（銀行口座合計）
   let cashAssets = getBankAccountTotal();
   // 各ファンドの状態を個別管理（ファンドごとに利回りが異なるため）
-  const fundStates = getAllFundsFlat().map(f => ({ ...f, currentBalance: f.balance, totalContribution: f.balance }));
+  const fundStates = getAllFundsFlat().map(f => ({ ...f, currentBalance: f.balance, totalContribution: f.balance, isFuture: false }));
+  // 将来購入予定ファンド（buyAfterYearsまではcurrentBalance=0、購入年にbalanceを投入）
+  const futureFundStates = getFutureFundsFlat().map(f => ({ ...f, currentBalance: 0, totalContribution: 0, isFuture: true, started: false, sold: false }));
+  const allFundStates = [...fundStates, ...futureFundStates];
   const investMonthlyTotal = fundStates.reduce((s,f) => s + f.monthly, 0);
 
   // iDeCo
@@ -1394,19 +1509,32 @@ function simulate() {
     if (hasHome && age < homeLoanEndAge) loanPayment += homeLoanMonthly * 12;
     if (hasOther && age < otherLoanEndAge) loanPayment += otherLoanMonthly * 12;
 
-    // --- 投資（ファンドごとに利回り計算、売却年対応） ---
+    // --- 投資（ファンドごとに利回り計算、売却年対応、将来ファンド含む） ---
     let investGain = 0;
     let investAssets = 0;
-    fundStates.forEach(f => {
+    let totalDividend = 0;
+    allFundStates.forEach(f => {
       if (f.sold) {
-        // 売却済み → 何もしない
         investAssets += 0;
         return;
       }
-      // 売却年チェック（sellAfterYearsが設定され、その年数が経過したら売却→現金へ）
-      if (f.sellAfterYears !== null && year >= f.sellAfterYears) {
+      // 将来ファンド: 購入年になったら開始
+      if (f.isFuture && !f.started) {
+        if (f.buyAfterYears !== null && year >= f.buyAfterYears) {
+          f.started = true;
+          f.currentBalance = f.balance;  // 購入金額を投入
+          f.totalContribution = f.balance;
+          cashAssets -= f.balance;  // 現金から購入資金を引く
+        } else {
+          return;  // まだ購入時期でない
+        }
+      }
+      // 売却年チェック（将来ファンドは購入年からの経過年数で判定）
+      const sellYear = f.isFuture
+        ? (f.sellAfterYears !== null && f.buyAfterYears !== null ? f.buyAfterYears + f.sellAfterYears : null)
+        : f.sellAfterYears;
+      if (sellYear !== null && year >= sellYear) {
         let proceeds = f.currentBalance;
-        // 特定口座・一般口座: 利益に20.315%課税（NISAは非課税）
         if (f.accountType === 'tokutei' || f.accountType === 'ippan') {
           const profit = Math.max(0, f.currentBalance - f.totalContribution);
           const tax = profit * 0.20315;
@@ -1425,9 +1553,10 @@ function simulate() {
         const grossDiv = f.currentBalance * f.dividendRate;
         const netDiv = (f.accountType === 'nisa') ? grossDiv : grossDiv * (1 - 0.20315);
         cashAssets += netDiv;
+        totalDividend += netDiv;
       }
       f.currentBalance += gain + f.monthly * 12;
-      f.totalContribution += f.monthly * 12;  // 元本累積
+      f.totalContribution += f.monthly * 12;
       investAssets += f.currentBalance;
     });
 
@@ -1510,16 +1639,16 @@ function simulate() {
       drawdown = -cashAssets; // 不足額
       isDrawingDown = true;
       // 投資ファンドから按分で切り崩し
-      const totalFundBalance = fundStates.reduce((s,f) => s + f.currentBalance, 0);
+      const totalFundBalance = allFundStates.reduce((s,f) => s + f.currentBalance, 0);
       if (totalFundBalance + idecoAssets > 0) {
         if (drawdown <= totalFundBalance) {
           // 投資ファンドから切り崩し
           const ratio = totalFundBalance > 0 ? drawdown / totalFundBalance : 0;
-          fundStates.forEach(f => { f.currentBalance -= f.currentBalance * ratio; });
+          allFundStates.forEach(f => { f.currentBalance -= f.currentBalance * ratio; });
         } else {
           // 投資ファンド全額 + iDeCoから不足分
           const remaining = drawdown - totalFundBalance;
-          fundStates.forEach(f => { f.currentBalance = 0; });
+          allFundStates.forEach(f => { f.currentBalance = 0; });
           idecoAssets = Math.max(0, idecoAssets - remaining);
         }
         cashAssets = 0;
@@ -1527,7 +1656,7 @@ function simulate() {
       // 全資産枯渇の場合はcashAssetsがマイナスのまま残る
     }
 
-    investAssets = fundStates.reduce((s,f) => s + f.currentBalance, 0);
+    investAssets = allFundStates.reduce((s,f) => s + f.currentBalance, 0);
     const totalAssets = cashAssets + emergencyFund + investAssets + idecoAssets;
 
     labels.push(age);
@@ -1557,7 +1686,8 @@ function simulate() {
       emergency: Math.round(emergencyFund),
       invest: Math.round(investAssets),
       ideco: Math.round(idecoAssets),
-      total: Math.round(totalAssets)
+      total: Math.round(totalAssets),
+      dividend: Math.round(totalDividend)
     });
   }
 
@@ -1587,8 +1717,8 @@ function renderChart(labels, dataCash, dataEmergency, dataInvest, dataIdeco, dat
 
   // 年間支出データ（ローン・学費・車・イベント含む）
   const dataExpense = rows.map(r => Math.round(r.expense + r.edu + r.loan + r.car + r.appliance + r.eventCost));
-  // 年間収入データ（勤労収入 + 年金）
-  const dataIncome = rows.map(r => Math.round(r.income + r.pension));
+  // 年間収入データ（勤労収入 + 年金 + 配当金）
+  const dataIncome = rows.map(r => Math.round(r.income + r.pension + (r.dividend || 0)));
 
   // 切り崩し開始以降の背景を赤くハイライトするプラグイン
   const drawdownZonePlugin = {
@@ -1801,6 +1931,7 @@ function getAllInputValues() {
   ['rakuten','sbi','other'].forEach(b => {
     inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
   });
+  inputs._futureFunds = futureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
   inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
   inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
   inputs._travels = travels.map(t => ({ name: t.name, cost: t.cost, frequency: t.frequency }));
@@ -1847,6 +1978,10 @@ function setAllInputValues(data) {
         renderFunds(b);
       }
     });
+  }
+  if (data._futureFunds) {
+    futureFunds = data._futureFunds.map(f => ({ ...f, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderFutureFunds();
   }
   if (data._expenseCategories) {
     expenseCategories = data._expenseCategories.map(c => ({ ...c, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
