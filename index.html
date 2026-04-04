@@ -280,6 +280,7 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
     <h3>投資（積立NISA・特定口座等）</h3>
     <div class="info-box">証券会社ごとにファンドを追加できます。各ファンドに残高・積立額・利回りを個別設定。「売却」に年数を入れると、その年数後に全額を現金化します。</div>
 
+    <h4 style="color:var(--accent);margin:12px 0 4px">📌 自分</h4>
     <div id="brokerSection_rakuten" class="broker-section">
       <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
         <b style="color:var(--accent2);font-size:0.9em">楽天証券</b>
@@ -315,6 +316,44 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
       <div class="info-box" style="font-size:0.8em;margin-bottom:6px">将来購入する予定のファンドを登録できます。「購入」に年数を入れると、その年数後に購入を開始します。配当金は購入後から売却まで毎年現金に加算されます。</div>
       <div id="futureFundList"></div>
       <button class="btn-small btn-add" onclick="addFutureFund()">+ 将来ファンド追加</button>
+    </div>
+
+    <h4 style="color:var(--accent);margin:16px 0 4px">📌 パートナー</h4>
+    <div id="brokerSection_p_rakuten" class="broker-section">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">楽天証券</b>
+        <span class="info-box" id="brokerTotal_p_rakuten" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div id="fundList_p_rakuten"></div>
+      <button class="btn-small btn-add" onclick="addFund('p_rakuten')">+ ファンド追加</button>
+    </div>
+
+    <div id="brokerSection_p_sbi" class="broker-section" style="margin-top:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">SBI証券</b>
+        <span class="info-box" id="brokerTotal_p_sbi" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div id="fundList_p_sbi"></div>
+      <button class="btn-small btn-add" onclick="addFund('p_sbi')">+ ファンド追加</button>
+    </div>
+
+    <div id="brokerSection_p_other" class="broker-section" style="margin-top:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">その他</b>
+        <span class="info-box" id="brokerTotal_p_other" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div id="fundList_p_other"></div>
+      <button class="btn-small btn-add" onclick="addFund('p_other')">+ ファンド追加</button>
+    </div>
+
+    <div id="partnerFutureFundSection" class="broker-section" style="margin-top:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px">
+        <b style="color:var(--accent2);font-size:0.9em">将来購入予定ファンド</b>
+        <span class="info-box" id="partnerFutureFundTotal" style="margin:0;padding:2px 8px;font-size:0.78em">合計: -</span>
+      </div>
+      <div class="info-box" style="font-size:0.8em;margin-bottom:6px">パートナーの将来購入予定ファンド。</div>
+      <div id="partnerFutureFundList"></div>
+      <button class="btn-small btn-add" onclick="addPartnerFutureFund()">+ 将来ファンド追加</button>
     </div>
 
     <h3>iDeCo（個人型確定拠出年金）</h3>
@@ -1062,8 +1101,9 @@ const FUND_PRESETS = {
   '国内REIT': 4.0, '新興国株式': 8.0, 'バランス型': 5.0
 };
 
-let funds = { rakuten: [], sbi: [], other: [] };
+let funds = { rakuten: [], sbi: [], other: [], p_rakuten: [], p_sbi: [], p_other: [] };
 let futureFunds = [];
+let partnerFutureFunds = [];
 
 function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='', accountType='nisa', dividendRate='') {
   funds[broker].push({
@@ -1151,9 +1191,9 @@ function updateBrokerTotal(broker) {
   if (el) el.textContent = `残高: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
 }
 function getAllFundsFlat() {
-  // シミュレーション用: 全ファンドを配列で返す
+  // シミュレーション用: 全ファンドを配列で返す（自分+パートナー）
   const all = [];
-  ['rakuten','sbi','other'].forEach(b => {
+  ['rakuten','sbi','other','p_rakuten','p_sbi','p_other'].forEach(b => {
     funds[b].forEach(f => {
       all.push({
         balance: parseFloat(f.balance) || 0,
@@ -1270,6 +1310,104 @@ function getFutureFundsFlat() {
   }));
 }
 
+// ====== パートナー将来購入予定ファンド ======
+function addPartnerFutureFund(name='', balance='', monthly='', returnRate='', dividendRate='', buyAfterYears='', sellAfterYears='', accountType='nisa') {
+  partnerFutureFunds.push({
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, dividendRate, buyAfterYears, sellAfterYears, accountType
+  });
+  renderPartnerFutureFunds();
+}
+function removePartnerFutureFund(id) {
+  partnerFutureFunds = partnerFutureFunds.filter(f => f.id !== id);
+  renderPartnerFutureFunds();
+}
+function updatePartnerFutureFund(id, key, value) {
+  const f = partnerFutureFunds.find(f => f.id === id);
+  if (f) f[key] = value;
+  if (key === 'name' && FUND_PRESETS[value] !== undefined) {
+    const fnd = partnerFutureFunds.find(f => f.id === id);
+    if (fnd && !fnd.returnRate) { fnd.returnRate = FUND_PRESETS[value]; renderPartnerFutureFunds(); }
+  }
+  updatePartnerFutureFundTotal();
+}
+function renderPartnerFutureFunds() {
+  const presetOptions = Object.keys(FUND_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('');
+  document.getElementById('partnerFutureFundList').innerHTML = partnerFutureFunds.map(f => `
+    <div class="event-row" style="align-items:end">
+      <div class="field" style="min-width:120px"><label>ファンド名</label>
+        <input type="text" value="${f.name}" list="fundPresets"
+          oninput="updatePartnerFutureFund(${f.id},'name',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'name',this.value)">
+      </div>
+      <div class="field field-narrow"><label>金額<span class="unit">万円</span></label>
+        <input type="number" value="${f.balance}" step="5" min="0"
+          oninput="updatePartnerFutureFund(${f.id},'balance',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'balance',this.value)">
+      </div>
+      <div class="field field-narrow"><label>積立<span class="unit">万/月</span></label>
+        <input type="number" value="${f.monthly}" step="0.5" min="0"
+          oninput="updatePartnerFutureFund(${f.id},'monthly',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'monthly',this.value)">
+      </div>
+      <div class="field field-narrow"><label>複利利回り<span class="unit">%/年</span></label>
+        <input type="number" value="${f.returnRate}" step="0.5" min="0" max="30"
+          oninput="updatePartnerFutureFund(${f.id},'returnRate',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'returnRate',this.value)">
+      </div>
+      <div class="field field-narrow"><label>配当利回り<span class="unit">%/年</span></label>
+        <input type="number" value="${f.dividendRate || ''}" step="0.1" min="0" max="30" placeholder="0"
+          oninput="updatePartnerFutureFund(${f.id},'dividendRate',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'dividendRate',this.value)">
+      </div>
+      <div class="field field-narrow"><label>購入<span class="unit">年後</span></label>
+        <input type="number" value="${f.buyAfterYears}" step="1" min="1" max="50" placeholder="年後"
+          oninput="updatePartnerFutureFund(${f.id},'buyAfterYears',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'buyAfterYears',this.value)">
+      </div>
+      <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
+        <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
+          oninput="updatePartnerFutureFund(${f.id},'sellAfterYears',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'sellAfterYears',this.value)">
+      </div>
+      <div class="field field-narrow"><label>口座</label>
+        <select onchange="updatePartnerFutureFund(${f.id},'accountType',this.value)" style="font-size:0.82em">
+          <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
+          <option value="tokutei" ${f.accountType==='tokutei'?'selected':''}>特定口座</option>
+          <option value="ippan" ${f.accountType==='ippan'?'selected':''}>一般口座</option>
+        </select>
+      </div>
+      <button class="btn-small btn-danger" onclick="removePartnerFutureFund(${f.id})" style="margin-bottom:2px">削除</button>
+    </div>
+  `).join('');
+  updatePartnerFutureFundTotal();
+}
+function updatePartnerFutureFundTotal() {
+  const total = partnerFutureFunds.reduce((s,f) => s + (parseFloat(f.balance)||0), 0);
+  const monthly = partnerFutureFunds.reduce((s,f) => s + (parseFloat(f.monthly)||0), 0);
+  const dividend = partnerFutureFunds.reduce((s,f) => {
+    const bal = parseFloat(f.balance) || 0;
+    const divRate = (parseFloat(f.dividendRate) || 0) / 100;
+    if (divRate <= 0) return s;
+    const grossDiv = bal * divRate;
+    const acct = f.accountType || 'nisa';
+    return s + (acct === 'nisa' ? grossDiv : grossDiv * (1 - 0.20315));
+  }, 0);
+  const el = document.getElementById('partnerFutureFundTotal');
+  if (el) el.textContent = `予定額: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
+}
+function getPartnerFutureFundsFlat() {
+  return partnerFutureFunds.map(f => ({
+    balance: parseFloat(f.balance) || 0,
+    monthly: parseFloat(f.monthly) || 0,
+    returnRate: (parseFloat(f.returnRate) || 0) / 100,
+    dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
+    buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
+    sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+    accountType: f.accountType || 'nisa',
+    totalContribution: parseFloat(f.balance) || 0
+  }));
+}
+
 // ====== 年収ステップ変更 ======
 let incomeSteps = [];
 function addIncomeStep(age='', who='my', amount='') {
@@ -1373,7 +1511,8 @@ function simulate() {
   const fundStates = getAllFundsFlat().map(f => ({ ...f, currentBalance: f.balance, totalContribution: f.balance, isFuture: false }));
   // 将来購入予定ファンド（buyAfterYearsまではcurrentBalance=0、購入年にbalanceを投入）
   const futureFundStates = getFutureFundsFlat().map(f => ({ ...f, currentBalance: 0, totalContribution: 0, isFuture: true, started: false, sold: false }));
-  const allFundStates = [...fundStates, ...futureFundStates];
+  const partnerFutureFundStates = getPartnerFutureFundsFlat().map(f => ({ ...f, currentBalance: 0, totalContribution: 0, isFuture: true, started: false, sold: false }));
+  const allFundStates = [...fundStates, ...futureFundStates, ...partnerFutureFundStates];
   const investMonthlyTotal = fundStates.reduce((s,f) => s + f.monthly, 0);
 
   // iDeCo
@@ -1928,10 +2067,11 @@ function getAllInputValues() {
   inputs._events = events.map(e => ({ age: e.age, name: e.name, amount: e.amount }));
   inputs._incomeSteps = incomeSteps.map(s => ({ age: s.age, who: s.who, amount: s.amount }));
   inputs._funds = {};
-  ['rakuten','sbi','other'].forEach(b => {
+  ['rakuten','sbi','other','p_rakuten','p_sbi','p_other'].forEach(b => {
     inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
   });
   inputs._futureFunds = futureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
+  inputs._partnerFutureFunds = partnerFutureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
   inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
   inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
   inputs._travels = travels.map(t => ({ name: t.name, cost: t.cost, frequency: t.frequency }));
@@ -1972,7 +2112,7 @@ function setAllInputValues(data) {
     renderIncomeSteps();
   }
   if (data._funds) {
-    ['rakuten','sbi','other'].forEach(b => {
+    ['rakuten','sbi','other','p_rakuten','p_sbi','p_other'].forEach(b => {
       if (data._funds[b]) {
         funds[b] = data._funds[b].map(f => ({ ...f, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
         renderFunds(b);
@@ -1982,6 +2122,10 @@ function setAllInputValues(data) {
   if (data._futureFunds) {
     futureFunds = data._futureFunds.map(f => ({ ...f, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
     renderFutureFunds();
+  }
+  if (data._partnerFutureFunds) {
+    partnerFutureFunds = data._partnerFutureFunds.map(f => ({ ...f, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
+    renderPartnerFutureFunds();
   }
   if (data._expenseCategories) {
     expenseCategories = data._expenseCategories.map(c => ({ ...c, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
