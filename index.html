@@ -1054,9 +1054,9 @@ const FUND_PRESETS = {
 
 let funds = { rakuten: [], sbi: [], other: [] };
 
-function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='', accountType='nisa') {
+function addFund(broker, name='', balance='', monthly='', returnRate='', sellAfterYears='', accountType='nisa', dividendRate='') {
   funds[broker].push({
-    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, sellAfterYears, accountType
+    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000), name, balance, monthly, returnRate, dividendRate, sellAfterYears, accountType
   });
   renderFunds(broker);
 }
@@ -1097,10 +1097,15 @@ function renderFunds(broker) {
           oninput="updateFund('${broker}',${f.id},'monthly',this.value)"
           onchange="updateFund('${broker}',${f.id},'monthly',this.value)">
       </div>
-      <div class="field field-narrow"><label>利回り<span class="unit">%/年</span></label>
+      <div class="field field-narrow"><label>複利利回り<span class="unit">%/年</span></label>
         <input type="number" value="${f.returnRate}" step="0.5" min="0" max="30"
           oninput="updateFund('${broker}',${f.id},'returnRate',this.value)"
           onchange="updateFund('${broker}',${f.id},'returnRate',this.value)">
+      </div>
+      <div class="field field-narrow"><label>配当利回り<span class="unit">%/年</span></label>
+        <input type="number" value="${f.dividendRate || ''}" step="0.1" min="0" max="30" placeholder="0"
+          oninput="updateFund('${broker}',${f.id},'dividendRate',this.value)"
+          onchange="updateFund('${broker}',${f.id},'dividendRate',this.value)">
       </div>
       <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
         <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
@@ -1122,8 +1127,17 @@ function renderFunds(broker) {
 function updateBrokerTotal(broker) {
   const total = funds[broker].reduce((s,f) => s + (parseFloat(f.balance)||0), 0);
   const monthly = funds[broker].reduce((s,f) => s + (parseFloat(f.monthly)||0), 0);
+  // 配当金計算: 残高 × 配当利回り（特定/一般口座は税引後）
+  const dividend = funds[broker].reduce((s,f) => {
+    const bal = parseFloat(f.balance) || 0;
+    const divRate = (parseFloat(f.dividendRate) || 0) / 100;
+    if (divRate <= 0) return s;
+    const grossDiv = bal * divRate;
+    const acct = f.accountType || 'nisa';
+    return s + (acct === 'nisa' ? grossDiv : grossDiv * (1 - 0.20315));
+  }, 0);
   const el = document.getElementById(`brokerTotal_${broker}`);
-  if (el) el.textContent = `残高: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月`;
+  if (el) el.textContent = `残高: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
 }
 function getAllFundsFlat() {
   // シミュレーション用: 全ファンドを配列で返す
@@ -1134,6 +1148,7 @@ function getAllFundsFlat() {
         balance: parseFloat(f.balance) || 0,
         monthly: parseFloat(f.monthly) || 0,
         returnRate: (parseFloat(f.returnRate) || 0) / 100,
+        dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
         sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
         accountType: f.accountType || 'nisa',
         totalContribution: parseFloat(f.balance) || 0  // 元本追跡用（積立額を累積）
@@ -1405,6 +1420,12 @@ function simulate() {
       }
       const gain = f.currentBalance * f.returnRate;
       investGain += gain;
+      // 配当金 → 現金に加算（NISA非課税、特定/一般は20.315%課税）
+      if (f.dividendRate > 0) {
+        const grossDiv = f.currentBalance * f.dividendRate;
+        const netDiv = (f.accountType === 'nisa') ? grossDiv : grossDiv * (1 - 0.20315);
+        cashAssets += netDiv;
+      }
       f.currentBalance += gain + f.monthly * 12;
       f.totalContribution += f.monthly * 12;  // 元本累積
       investAssets += f.currentBalance;
@@ -1778,7 +1799,7 @@ function getAllInputValues() {
   inputs._incomeSteps = incomeSteps.map(s => ({ age: s.age, who: s.who, amount: s.amount }));
   inputs._funds = {};
   ['rakuten','sbi','other'].forEach(b => {
-    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
+    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
   });
   inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
   inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
