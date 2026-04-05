@@ -1158,7 +1158,7 @@ function renderFunds(broker) {
           oninput="updateFund('${broker}',${f.id},'dividendRate',this.value)"
           onchange="updateFund('${broker}',${f.id},'dividendRate',this.value)">
       </div>
-      <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
+      <div class="field field-narrow"><label>一括売却<span class="unit">年後</span></label>
         <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
           oninput="updateFund('${broker}',${f.id},'sellAfterYears',this.value)"
           onchange="updateFund('${broker}',${f.id},'sellAfterYears',this.value)">
@@ -1278,7 +1278,7 @@ function renderFutureFunds() {
           oninput="updateFutureFund(${f.id},'buyAfterYears',this.value)"
           onchange="updateFutureFund(${f.id},'buyAfterYears',this.value)">
       </div>
-      <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
+      <div class="field field-narrow"><label>一括売却<span class="unit">年後</span></label>
         <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
           oninput="updateFutureFund(${f.id},'sellAfterYears',this.value)"
           onchange="updateFutureFund(${f.id},'sellAfterYears',this.value)">
@@ -1388,7 +1388,7 @@ function renderPartnerFutureFunds() {
           oninput="updatePartnerFutureFund(${f.id},'buyAfterYears',this.value)"
           onchange="updatePartnerFutureFund(${f.id},'buyAfterYears',this.value)">
       </div>
-      <div class="field field-narrow"><label>売却<span class="unit">年後</span></label>
+      <div class="field field-narrow"><label>一括売却<span class="unit">年後</span></label>
         <input type="number" value="${f.sellAfterYears || ''}" step="1" min="0" max="50" placeholder="なし"
           oninput="updatePartnerFutureFund(${f.id},'sellAfterYears',this.value)"
           onchange="updatePartnerFutureFund(${f.id},'sellAfterYears',this.value)">
