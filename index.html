@@ -1213,12 +1213,19 @@ function updateBrokerTotal(broker) {
   const el = document.getElementById(`brokerTotal_${broker}`);
   if (el) el.textContent = `残高: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
 }
+const BROKER_LABELS = {
+  rakuten: '楽天', sbi: 'SBI', other: 'その他',
+  p_rakuten: 'P楽天', p_sbi: 'P-SBI', p_other: 'Pその他'
+};
 function getAllFundsFlat() {
   // シミュレーション用: 全ファンドを配列で返す（自分+パートナー）
   const all = [];
   ['rakuten','sbi','other','p_rakuten','p_sbi','p_other'].forEach(b => {
     funds[b].forEach(f => {
+      const acctLabel = {nisa:'NISA', tokutei:'特定', ippan:'一般'}[f.accountType||'nisa'] || 'NISA';
       all.push({
+        name: f.name || '',
+        label: `[${BROKER_LABELS[b]}] ${f.name || '?'}`,
         balance: parseFloat(f.balance) || 0,
         monthly: parseFloat(f.monthly) || 0,
         returnRate: (parseFloat(f.returnRate) || 0) / 100,
@@ -1227,6 +1234,7 @@ function getAllFundsFlat() {
         withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
         withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
         accountType: f.accountType || 'nisa',
+        acctLabel,
         totalContribution: parseFloat(f.balance) || 0  // 元本追跡用（積立額を累積）
       });
     });
@@ -1333,18 +1341,24 @@ function updateFutureFundTotal() {
   if (el) el.textContent = `予定額: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
 }
 function getFutureFundsFlat() {
-  return futureFunds.map(f => ({
-    balance: parseFloat(f.balance) || 0,
-    monthly: parseFloat(f.monthly) || 0,
-    returnRate: (parseFloat(f.returnRate) || 0) / 100,
-    dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
-    buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
-    sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
-    withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
-    withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
-    accountType: f.accountType || 'nisa',
-    totalContribution: parseFloat(f.balance) || 0
-  }));
+  return futureFunds.map(f => {
+    const acctLabel = {nisa:'NISA', tokutei:'特定', ippan:'一般'}[f.accountType||'nisa'] || 'NISA';
+    return {
+      name: f.name || '',
+      label: `[将来] ${f.name || '?'}`,
+      balance: parseFloat(f.balance) || 0,
+      monthly: parseFloat(f.monthly) || 0,
+      returnRate: (parseFloat(f.returnRate) || 0) / 100,
+      dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
+      buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
+      sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+      withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
+      withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
+      accountType: f.accountType || 'nisa',
+      acctLabel,
+      totalContribution: parseFloat(f.balance) || 0
+    };
+  });
 }
 
 // ====== パートナー将来購入予定ファンド ======
@@ -1443,18 +1457,24 @@ function updatePartnerFutureFundTotal() {
   if (el) el.textContent = `予定額: ${Math.round(total*10)/10}万 / 積立: ${Math.round(monthly*10)/10}万/月 / 配当: ${Math.round(dividend*10)/10}万/年`;
 }
 function getPartnerFutureFundsFlat() {
-  return partnerFutureFunds.map(f => ({
-    balance: parseFloat(f.balance) || 0,
-    monthly: parseFloat(f.monthly) || 0,
-    returnRate: (parseFloat(f.returnRate) || 0) / 100,
-    dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
-    buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
-    sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
-    withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
-    withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
-    accountType: f.accountType || 'nisa',
-    totalContribution: parseFloat(f.balance) || 0
-  }));
+  return partnerFutureFunds.map(f => {
+    const acctLabel = {nisa:'NISA', tokutei:'特定', ippan:'一般'}[f.accountType||'nisa'] || 'NISA';
+    return {
+      name: f.name || '',
+      label: `[P将来] ${f.name || '?'}`,
+      balance: parseFloat(f.balance) || 0,
+      monthly: parseFloat(f.monthly) || 0,
+      returnRate: (parseFloat(f.returnRate) || 0) / 100,
+      dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
+      buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
+      sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+      withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
+      withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
+      accountType: f.accountType || 'nisa',
+      acctLabel,
+      totalContribution: parseFloat(f.balance) || 0
+    };
+  });
 }
 
 // ====== 年収ステップ変更 ======
@@ -1708,7 +1728,7 @@ function simulate() {
     let totalDividend = 0;
     const fundSnapshots = [];
     allFundStates.forEach((f, fi) => {
-      const snap = { name: f.name || `ファンド${fi+1}`, balance: 0, gain: 0, dividend: 0, withdraw: 0, contribution: 0, sold: false };
+      const snap = { name: f.label || f.name || `ファンド${fi+1}`, acctLabel: f.acctLabel || '', returnRate: Math.round(f.returnRate * 1000)/10, dividendRate: Math.round(f.dividendRate * 1000)/10, balance: 0, gain: 0, dividend: 0, withdraw: 0, contribution: 0, sold: false };
       if (f.sold) {
         snap.sold = true;
         fundSnapshots.push(snap);
@@ -2209,7 +2229,16 @@ function renderSpreadTable(rows, detailed) {
   const fields = detailed ? detailFields : summaryFields;
 
   // ファンド名のリストを取得（最初の行のスナップショットから）
-  const fundNames = rows[0] && rows[0].fundSnapshots ? rows[0].fundSnapshots.map(s => s.name) : [];
+  // ファンドラベル: "[楽天] S&P500 (NISA/8%)" のようなリッチな表示
+  const fundLabels = rows[0] && rows[0].fundSnapshots ? rows[0].fundSnapshots.map(s => {
+    let info = s.name || '?';
+    const details = [];
+    if (s.acctLabel) details.push(s.acctLabel);
+    if (s.returnRate) details.push(`${s.returnRate}%`);
+    if (s.dividendRate) details.push(`配当${s.dividendRate}%`);
+    if (details.length) info += ` (${details.join('/')})`;
+    return info;
+  }) : [];
 
   let html = '<tr><th class="row-header">項目</th>';
   rows.forEach(r => { html += `<th>${r.age}</th>`; });
@@ -2242,11 +2271,11 @@ function renderSpreadTable(rows, detailed) {
   });
 
   // ファンド別詳細（詳細モードのみ）
-  if (detailed && fundNames.length > 0) {
+  if (detailed && fundLabels.length > 0) {
     html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別残高</td></tr>`;
-    fundNames.forEach((name, fi) => {
+    fundLabels.forEach((label, fi) => {
       html += '<tr>';
-      html += `<td class="row-header">┣ ${name}</td>`;
+      html += `<td class="row-header">┣ ${label}</td>`;
       rows.forEach(r => {
         const snap = r.fundSnapshots && r.fundSnapshots[fi];
         if (!snap || snap.sold) {
@@ -2259,9 +2288,9 @@ function renderSpreadTable(rows, detailed) {
     });
 
     html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 運用益</td></tr>`;
-    fundNames.forEach((name, fi) => {
+    fundLabels.forEach((label, fi) => {
       html += '<tr>';
-      html += `<td class="row-header">┣ ${name}</td>`;
+      html += `<td class="row-header">┣ ${label}</td>`;
       rows.forEach(r => {
         const snap = r.fundSnapshots && r.fundSnapshots[fi];
         const val = snap ? snap.gain : 0;
@@ -2271,9 +2300,9 @@ function renderSpreadTable(rows, detailed) {
     });
 
     html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 配当金</td></tr>`;
-    fundNames.forEach((name, fi) => {
+    fundLabels.forEach((label, fi) => {
       html += '<tr>';
-      html += `<td class="row-header">┣ ${name}</td>`;
+      html += `<td class="row-header">┣ ${label}</td>`;
       rows.forEach(r => {
         const snap = r.fundSnapshots && r.fundSnapshots[fi];
         const val = snap ? snap.dividend : 0;
@@ -2283,9 +2312,9 @@ function renderSpreadTable(rows, detailed) {
     });
 
     html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 定期売却</td></tr>`;
-    fundNames.forEach((name, fi) => {
+    fundLabels.forEach((label, fi) => {
       html += '<tr>';
-      html += `<td class="row-header">┣ ${name}</td>`;
+      html += `<td class="row-header">┣ ${label}</td>`;
       rows.forEach(r => {
         const snap = r.fundSnapshots && r.fundSnapshots[fi];
         const val = snap ? snap.withdraw : 0;
@@ -2295,9 +2324,9 @@ function renderSpreadTable(rows, detailed) {
     });
 
     html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 積立額</td></tr>`;
-    fundNames.forEach((name, fi) => {
+    fundLabels.forEach((label, fi) => {
       html += '<tr>';
-      html += `<td class="row-header">┣ ${name}</td>`;
+      html += `<td class="row-header">┣ ${label}</td>`;
       rows.forEach(r => {
         const snap = r.fundSnapshots && r.fundSnapshots[fi];
         const val = snap ? snap.contribution : 0;
