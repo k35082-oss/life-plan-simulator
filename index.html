@@ -533,7 +533,7 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
       <table id="resultTable">
         <thead>
           <tr>
-            <th>年齢</th><th>収入</th><th>年金</th><th>支出</th><th>学費</th>
+            <th>年齢</th><th>収入</th><th>年金</th><th>配当/取崩</th><th>支出</th><th>学費</th>
             <th>ローン</th><th>車</th><th>家電</th><th>イベント</th>
             <th>投資損益</th><th>iDeCo損益</th><th>切崩し</th><th>年間収支</th><th>現金</th><th>防衛</th><th>投資</th><th>iDeCo</th><th>総資産</th>
           </tr>
@@ -2064,6 +2064,7 @@ function renderTable(rows) {
     const ev = r.eventCost > 0 ? `${r.eventCost.toLocaleString()} (${r.eventNames})` : '-';
     return `<tr class="${cls}">
       <td>${r.age}</td><td>${r.income.toLocaleString()}</td><td>${r.pension > 0 ? r.pension.toLocaleString() : '-'}</td>
+      <td style="color:var(--accent2)">${(r.dividend || 0) > 0 ? r.dividend.toLocaleString() : '-'}</td>
       <td>${r.expense.toLocaleString()}</td><td>${r.edu > 0 ? r.edu.toLocaleString() : '-'}</td>
       <td>${r.loan > 0 ? r.loan.toLocaleString() : '-'}</td>
       <td>${r.car > 0 ? r.car.toLocaleString() : '-'}</td><td>${r.appliance > 0 ? r.appliance.toLocaleString() : '-'}</td><td>${ev}</td>
