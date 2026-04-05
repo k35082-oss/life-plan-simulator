@@ -1163,6 +1163,16 @@ function renderFunds(broker) {
           oninput="updateFund('${broker}',${f.id},'sellAfterYears',this.value)"
           onchange="updateFund('${broker}',${f.id},'sellAfterYears',this.value)">
       </div>
+      <div class="field field-narrow"><label>定期売却<span class="unit">歳〜</span></label>
+        <input type="number" value="${f.withdrawStartAge || ''}" step="1" min="30" max="90" placeholder="なし"
+          oninput="updateFund('${broker}',${f.id},'withdrawStartAge',this.value)"
+          onchange="updateFund('${broker}',${f.id},'withdrawStartAge',this.value)">
+      </div>
+      <div class="field field-narrow"><label>取崩率<span class="unit">%/年</span></label>
+        <input type="number" value="${f.withdrawRate || ''}" step="0.5" min="0" max="100" placeholder="0"
+          oninput="updateFund('${broker}',${f.id},'withdrawRate',this.value)"
+          onchange="updateFund('${broker}',${f.id},'withdrawRate',this.value)">
+      </div>
       <div class="field field-narrow"><label>口座</label>
         <select onchange="updateFund('${broker}',${f.id},'accountType',this.value)" style="font-size:0.82em">
           <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
@@ -1201,6 +1211,8 @@ function getAllFundsFlat() {
         returnRate: (parseFloat(f.returnRate) || 0) / 100,
         dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
         sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+        withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
+        withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
         accountType: f.accountType || 'nisa',
         totalContribution: parseFloat(f.balance) || 0  // 元本追跡用（積立額を累積）
       });
@@ -1271,6 +1283,16 @@ function renderFutureFunds() {
           oninput="updateFutureFund(${f.id},'sellAfterYears',this.value)"
           onchange="updateFutureFund(${f.id},'sellAfterYears',this.value)">
       </div>
+      <div class="field field-narrow"><label>定期売却<span class="unit">歳〜</span></label>
+        <input type="number" value="${f.withdrawStartAge || ''}" step="1" min="30" max="90" placeholder="なし"
+          oninput="updateFutureFund(${f.id},'withdrawStartAge',this.value)"
+          onchange="updateFutureFund(${f.id},'withdrawStartAge',this.value)">
+      </div>
+      <div class="field field-narrow"><label>取崩率<span class="unit">%/年</span></label>
+        <input type="number" value="${f.withdrawRate || ''}" step="0.5" min="0" max="100" placeholder="0"
+          oninput="updateFutureFund(${f.id},'withdrawRate',this.value)"
+          onchange="updateFutureFund(${f.id},'withdrawRate',this.value)">
+      </div>
       <div class="field field-narrow"><label>口座</label>
         <select onchange="updateFutureFund(${f.id},'accountType',this.value)" style="font-size:0.82em">
           <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
@@ -1305,6 +1327,8 @@ function getFutureFundsFlat() {
     dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
     buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
     sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+    withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
+    withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
     accountType: f.accountType || 'nisa',
     totalContribution: parseFloat(f.balance) || 0
   }));
@@ -1369,6 +1393,16 @@ function renderPartnerFutureFunds() {
           oninput="updatePartnerFutureFund(${f.id},'sellAfterYears',this.value)"
           onchange="updatePartnerFutureFund(${f.id},'sellAfterYears',this.value)">
       </div>
+      <div class="field field-narrow"><label>定期売却<span class="unit">歳〜</span></label>
+        <input type="number" value="${f.withdrawStartAge || ''}" step="1" min="30" max="90" placeholder="なし"
+          oninput="updatePartnerFutureFund(${f.id},'withdrawStartAge',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'withdrawStartAge',this.value)">
+      </div>
+      <div class="field field-narrow"><label>取崩率<span class="unit">%/年</span></label>
+        <input type="number" value="${f.withdrawRate || ''}" step="0.5" min="0" max="100" placeholder="0"
+          oninput="updatePartnerFutureFund(${f.id},'withdrawRate',this.value)"
+          onchange="updatePartnerFutureFund(${f.id},'withdrawRate',this.value)">
+      </div>
       <div class="field field-narrow"><label>口座</label>
         <select onchange="updatePartnerFutureFund(${f.id},'accountType',this.value)" style="font-size:0.82em">
           <option value="nisa" ${(f.accountType||'nisa')==='nisa'?'selected':''}>NISA</option>
@@ -1403,6 +1437,8 @@ function getPartnerFutureFundsFlat() {
     dividendRate: (parseFloat(f.dividendRate) || 0) / 100,
     buyAfterYears: f.buyAfterYears ? parseInt(f.buyAfterYears) : null,
     sellAfterYears: f.sellAfterYears ? parseInt(f.sellAfterYears) : null,
+    withdrawStartAge: f.withdrawStartAge ? parseInt(f.withdrawStartAge) : null,
+    withdrawRate: (parseFloat(f.withdrawRate) || 0) / 100,
     accountType: f.accountType || 'nisa',
     totalContribution: parseFloat(f.balance) || 0
   }));
@@ -1668,11 +1704,9 @@ function simulate() {
           return;  // まだ購入時期でない
         }
       }
-      // 売却年チェック（将来ファンドは購入年からの経過年数で判定）
-      const sellYear = f.isFuture
-        ? (f.sellAfterYears !== null && f.buyAfterYears !== null ? f.buyAfterYears + f.sellAfterYears : null)
-        : f.sellAfterYears;
-      if (sellYear !== null && year >= sellYear) {
+      // 売却年チェック（将来ファンドは購入後のみ売却可能）
+      const sellYear = f.sellAfterYears;
+      if (sellYear !== null && year >= sellYear && (!f.isFuture || f.started)) {
         let proceeds = f.currentBalance;
         if (f.accountType === 'tokutei' || f.accountType === 'ippan') {
           const profit = Math.max(0, f.currentBalance - f.totalContribution);
@@ -1684,6 +1718,21 @@ function simulate() {
         f.currentBalance = 0;
         investAssets += 0;
         return;
+      }
+      // 定期売却（年初に残高の一定%を売却→現金へ）
+      if (f.withdrawStartAge !== null && f.withdrawRate > 0 && age >= f.withdrawStartAge) {
+        const withdrawAmount = f.currentBalance * f.withdrawRate;
+        let netWithdraw = withdrawAmount;
+        if (f.accountType === 'tokutei' || f.accountType === 'ippan') {
+          // 取崩し額のうち利益部分に課税（簿価按分）
+          const gainRatio = f.totalContribution > 0 ? Math.max(0, 1 - f.totalContribution / f.currentBalance) : 0;
+          const taxableGain = withdrawAmount * gainRatio;
+          netWithdraw = withdrawAmount - taxableGain * 0.20315;
+          f.totalContribution -= withdrawAmount * (1 - gainRatio);  // 元本部分を減算
+        }
+        f.currentBalance -= withdrawAmount;
+        cashAssets += netWithdraw;
+        totalDividend += netWithdraw;  // 収入として計上
       }
       const gain = f.currentBalance * f.returnRate;
       investGain += gain;
@@ -2068,10 +2117,10 @@ function getAllInputValues() {
   inputs._incomeSteps = incomeSteps.map(s => ({ age: s.age, who: s.who, amount: s.amount }));
   inputs._funds = {};
   ['rakuten','sbi','other','p_rakuten','p_sbi','p_other'].forEach(b => {
-    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
+    inputs._funds[b] = funds[b].map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', sellAfterYears: f.sellAfterYears || '', withdrawStartAge: f.withdrawStartAge || '', withdrawRate: f.withdrawRate || '', accountType: f.accountType || 'nisa' }));
   });
-  inputs._futureFunds = futureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
-  inputs._partnerFutureFunds = partnerFutureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', accountType: f.accountType || 'nisa' }));
+  inputs._futureFunds = futureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', withdrawStartAge: f.withdrawStartAge || '', withdrawRate: f.withdrawRate || '', accountType: f.accountType || 'nisa' }));
+  inputs._partnerFutureFunds = partnerFutureFunds.map(f => ({ name: f.name, balance: f.balance, monthly: f.monthly, returnRate: f.returnRate, dividendRate: f.dividendRate || '', buyAfterYears: f.buyAfterYears || '', sellAfterYears: f.sellAfterYears || '', withdrawStartAge: f.withdrawStartAge || '', withdrawRate: f.withdrawRate || '', accountType: f.accountType || 'nisa' }));
   inputs._expenseCategories = expenseCategories.map(c => ({ name: c.name, amount: c.amount }));
   inputs._appliances = appliances.map(a => ({ name: a.name, cost: a.cost, cycle: a.cycle, yearsUsed: a.yearsUsed }));
   inputs._travels = travels.map(t => ({ name: t.name, cost: t.cost, frequency: t.frequency }));
