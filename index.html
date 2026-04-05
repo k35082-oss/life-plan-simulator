@@ -114,6 +114,9 @@ table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
 th, td { padding: 5px 7px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
 th { background: var(--bg3); color: var(--accent2); position: sticky; top: 0; z-index: 1; }
 td:first-child, th:first-child { text-align: center; }
+#spreadTable th.row-header { position: sticky; left: 0; z-index: 2; background: var(--bg3); text-align: left; min-width: 90px; }
+#spreadTable td.row-header { position: sticky; left: 0; z-index: 1; background: var(--bg2); text-align: left; font-weight: bold; min-width: 90px; border-right: 2px solid var(--border); }
+#spreadTable .section-header td { background: var(--bg3); color: var(--accent2); font-weight: bold; font-size: 0.85em; }
 tr:hover td { background: rgba(0,210,255,0.05); }
 tr.negative td { color: var(--red); }
 tr.highlight td { background: rgba(233,69,96,0.15); }
@@ -529,7 +532,12 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
 <div class="section">
   <h2 onclick="toggleSection(this)">年齢別詳細テーブル</h2>
   <div class="section-body">
-    <div class="table-container">
+    <div style="margin-bottom:8px">
+      <button class="btn-small" id="btnTableNormal" onclick="setTableView('normal')" style="border-color:var(--accent2);color:var(--accent2)">通常表示</button>
+      <button class="btn-small" id="btnTableSpreadSummary" onclick="setTableView('spread-summary')">スプレッドシート（まとめ）</button>
+      <button class="btn-small" id="btnTableSpreadDetail" onclick="setTableView('spread-detail')">スプレッドシート（詳細）</button>
+    </div>
+    <div class="table-container" id="tableNormal">
       <table id="resultTable">
         <thead>
           <tr>
@@ -538,6 +546,11 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
             <th>投資損益</th><th>iDeCo損益</th><th>切崩し</th><th>年間収支</th><th>現金</th><th>防衛</th><th>投資</th><th>iDeCo</th><th>総資産</th>
           </tr>
         </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="table-container" id="tableSpread" style="display:none">
+      <table id="spreadTable">
         <tbody></tbody>
       </table>
     </div>
@@ -1623,17 +1636,22 @@ function simulate() {
     // --- 収入 ---
     let income = 0;
     let pensionIncome = 0;
+    let myWorkIncome = 0, partnerWorkIncome = 0, myPensionInc = 0, partnerPensionInc = 0;
     if (age < myRetire) {
-      income += (myInc + myBonus) * Math.pow(1 + raiseRate, year);
+      myWorkIncome = (myInc + myBonus) * Math.pow(1 + raiseRate, year);
+      income += myWorkIncome;
     }
     if (age >= myPensionStart) {
-      pensionIncome += myPensionAnnual;
+      myPensionInc = myPensionAnnual;
+      pensionIncome += myPensionInc;
     }
     if (pAge < partnerRetire) {
-      income += (partnerInc + partnerBonus) * Math.pow(1 + raiseRate, year);
+      partnerWorkIncome = (partnerInc + partnerBonus) * Math.pow(1 + raiseRate, year);
+      income += partnerWorkIncome;
     }
     if (pAge >= partnerPensionStart) {
-      pensionIncome += partnerPensionAnnual;
+      partnerPensionInc = partnerPensionAnnual;
+      pensionIncome += partnerPensionInc;
     }
 
     // 退職金
@@ -1688,8 +1706,12 @@ function simulate() {
     let investGain = 0;
     let investAssets = 0;
     let totalDividend = 0;
-    allFundStates.forEach(f => {
+    const fundSnapshots = [];
+    allFundStates.forEach((f, fi) => {
+      const snap = { name: f.name || `ファンド${fi+1}`, balance: 0, gain: 0, dividend: 0, withdraw: 0, contribution: 0, sold: false };
       if (f.sold) {
+        snap.sold = true;
+        fundSnapshots.push(snap);
         investAssets += 0;
         return;
       }
@@ -1701,6 +1723,7 @@ function simulate() {
           f.totalContribution = f.balance;
           cashAssets -= f.balance;  // 現金から購入資金を引く
         } else {
+          fundSnapshots.push(snap);
           return;  // まだ購入時期でない
         }
       }
@@ -1716,6 +1739,8 @@ function simulate() {
         cashAssets += proceeds;
         f.sold = true;
         f.currentBalance = 0;
+        snap.sold = true;
+        fundSnapshots.push(snap);
         investAssets += 0;
         return;
       }
@@ -1733,18 +1758,24 @@ function simulate() {
         f.currentBalance -= withdrawAmount;
         cashAssets += netWithdraw;
         totalDividend += netWithdraw;  // 収入として計上
+        snap.withdraw = Math.round(netWithdraw);
       }
       const gain = f.currentBalance * f.returnRate;
       investGain += gain;
+      snap.gain = Math.round(gain);
       // 配当金 → 現金に加算（NISA非課税、特定/一般は20.315%課税）
       if (f.dividendRate > 0) {
         const grossDiv = f.currentBalance * f.dividendRate;
         const netDiv = (f.accountType === 'nisa') ? grossDiv : grossDiv * (1 - 0.20315);
         cashAssets += netDiv;
         totalDividend += netDiv;
+        snap.dividend = Math.round(netDiv);
       }
+      snap.contribution = Math.round(f.monthly * 12);
       f.currentBalance += gain + f.monthly * 12;
       f.totalContribution += f.monthly * 12;
+      snap.balance = Math.round(f.currentBalance);
+      fundSnapshots.push(snap);
       investAssets += f.currentBalance;
     });
 
@@ -1858,8 +1889,18 @@ function simulate() {
     rows.push({
       age,
       income: Math.round(income),
+      myWorkIncome: Math.round(myWorkIncome),
+      partnerWorkIncome: Math.round(partnerWorkIncome),
+      childAllowance: Math.round(childAllowance),
       pension: Math.round(pensionIncome),
+      myPension: Math.round(myPensionInc),
+      partnerPension: Math.round(partnerPensionInc),
+      dividend: Math.round(totalDividend),
       expense: Math.round(expense + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0)),
+      livingCost: Math.round((livingCostBase * 12) * inflationMul),
+      investContrib: Math.round(investMonthlyTotal * 12),
+      idecoContrib: Math.round(hasIdeco && age < 60 ? idecoMonthly * 12 : 0),
+      travelCost: Math.round(travelCost),
       edu: Math.round(eduCost),
       loan: Math.round(loanPayment),
       car: Math.round(carCost + carReplaceCost),
@@ -1875,12 +1916,14 @@ function simulate() {
       invest: Math.round(investAssets),
       ideco: Math.round(idecoAssets),
       total: Math.round(totalAssets),
-      dividend: Math.round(totalDividend)
+      fundSnapshots: fundSnapshots
     });
   }
 
   renderChart(labels, dataCash, dataEmergency, dataInvest, dataIdeco, dataTotal, dataDrawdown, rows);
   renderTable(rows);
+  lastRows = rows;
+  renderSpreadTable(rows, currentTableView === 'spread-detail');
   renderSummary(rows);
 }
 
@@ -2076,6 +2119,195 @@ function renderTable(rows) {
       <td style="font-weight:bold;color:${r.total>=0?'var(--green)':'var(--red)'}">${r.total.toLocaleString()}</td>
     </tr>`;
   }).join('');
+}
+
+let currentTableView = 'normal';
+let lastRows = [];
+function setTableView(view) {
+  currentTableView = view;
+  const isSpread = view === 'spread-summary' || view === 'spread-detail';
+  document.getElementById('tableNormal').style.display = view === 'normal' ? '' : 'none';
+  document.getElementById('tableSpread').style.display = isSpread ? '' : 'none';
+  ['btnTableNormal','btnTableSpreadSummary','btnTableSpreadDetail'].forEach(id => {
+    const btn = document.getElementById(id);
+    const active = (id === 'btnTableNormal' && view === 'normal') ||
+                   (id === 'btnTableSpreadSummary' && view === 'spread-summary') ||
+                   (id === 'btnTableSpreadDetail' && view === 'spread-detail');
+    btn.style.borderColor = active ? 'var(--accent2)' : 'var(--border)';
+    btn.style.color = active ? 'var(--accent2)' : 'var(--text)';
+  });
+  if (isSpread && lastRows.length > 0) {
+    renderSpreadTable(lastRows, view === 'spread-detail');
+  }
+}
+
+function renderSpreadTable(rows, detailed) {
+  const tbody = document.querySelector('#spreadTable tbody');
+
+  // まとめ用フィールド
+  const summaryFields = [
+    { section: '収入' },
+    { key: 'income', label: '勤労収入', color: '' },
+    { key: 'pension', label: '年金', color: '' },
+    { key: 'dividend', label: '配当/取崩', color: 'var(--accent2)' },
+    { key: '_incomeTotal', label: '収入合計', color: 'var(--green)', bold: true },
+    { section: '支出' },
+    { key: 'expense', label: '生活費+積立', color: '' },
+    { key: 'edu', label: '学費', color: '' },
+    { key: 'loan', label: 'ローン', color: '' },
+    { key: 'car', label: '車', color: '' },
+    { key: 'appliance', label: '家電', color: '' },
+    { key: 'eventCost', label: 'イベント', color: '' },
+    { key: '_expenseTotal', label: '支出合計', color: 'var(--red)', bold: true },
+    { section: '運用' },
+    { key: 'investGain', label: '投資損益', color: '' },
+    { key: 'idecoGain', label: 'iDeCo損益', color: '' },
+    { key: 'drawdown', label: '資産切崩し', color: 'var(--red)' },
+    { section: '収支・資産' },
+    { key: 'annual', label: '年間収支', color: '', dynamic: true, bold: true },
+    { key: 'cash', label: '現金', color: '' },
+    { key: 'emergency', label: '防衛資金', color: 'var(--yellow)' },
+    { key: 'invest', label: '投資資産', color: '#3b82f6' },
+    { key: 'ideco', label: 'iDeCo', color: '#8b5cf6' },
+    { key: 'total', label: '総資産', color: '', bold: true, dynamic: true },
+  ];
+
+  // 詳細用フィールド
+  const detailFields = [
+    { section: '収入' },
+    { key: 'myWorkIncome', label: '┣ 自分の勤労収入', color: '' },
+    { key: 'partnerWorkIncome', label: '┣ パートナー勤労収入', color: '' },
+    { key: 'childAllowance', label: '┣ 児童手当', color: '' },
+    { key: 'myPension', label: '┣ 自分の年金', color: '' },
+    { key: 'partnerPension', label: '┣ パートナー年金', color: '' },
+    { key: 'dividend', label: '┣ 配当/取崩', color: 'var(--accent2)' },
+    { key: '_incomeTotal', label: '収入合計', color: 'var(--green)', bold: true },
+    { section: '支出' },
+    { key: 'livingCost', label: '┣ 生活費', color: '' },
+    { key: 'investContrib', label: '┣ 投資積立', color: '' },
+    { key: 'idecoContrib', label: '┣ iDeCo拠出', color: '' },
+    { key: 'travelCost', label: '┣ 旅行', color: '' },
+    { key: 'edu', label: '┣ 学費', color: '' },
+    { key: 'loan', label: '┣ ローン', color: '' },
+    { key: 'car', label: '┣ 車', color: '' },
+    { key: 'appliance', label: '┣ 家電', color: '' },
+    { key: 'eventCost', label: '┣ イベント', color: '' },
+    { key: '_expenseTotal', label: '支出合計', color: 'var(--red)', bold: true },
+    { section: '運用損益' },
+    { key: 'investGain', label: '┣ 投資損益', color: '' },
+    { key: 'idecoGain', label: '┣ iDeCo損益', color: '' },
+    { key: 'drawdown', label: '┣ 資産切崩し', color: 'var(--red)' },
+    { section: '収支・資産' },
+    { key: 'annual', label: '年間収支', color: '', dynamic: true, bold: true },
+    { key: 'cash', label: '┣ 現金', color: '' },
+    { key: 'emergency', label: '┣ 防衛資金', color: 'var(--yellow)' },
+    { key: 'invest', label: '┣ 投資資産', color: '#3b82f6' },
+    { key: 'ideco', label: '┣ iDeCo', color: '#8b5cf6' },
+    { key: 'total', label: '総資産', color: '', bold: true, dynamic: true },
+  ];
+
+  const fields = detailed ? detailFields : summaryFields;
+
+  // ファンド名のリストを取得（最初の行のスナップショットから）
+  const fundNames = rows[0] && rows[0].fundSnapshots ? rows[0].fundSnapshots.map(s => s.name) : [];
+
+  let html = '<tr><th class="row-header">項目</th>';
+  rows.forEach(r => { html += `<th>${r.age}</th>`; });
+  html += '</tr>';
+
+  // 基本項目
+  fields.forEach(f => {
+    if (f.section) {
+      html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">${f.section}</td></tr>`;
+      return;
+    }
+    html += '<tr>';
+    html += `<td class="row-header">${f.label}</td>`;
+    rows.forEach(r => {
+      let val;
+      if (f.key === '_incomeTotal') {
+        val = (r.myWorkIncome||0) + (r.partnerWorkIncome||0) + (r.childAllowance||0) + (r.myPension||0) + (r.partnerPension||0) + (r.dividend||0);
+      } else if (f.key === '_expenseTotal') {
+        val = (r.livingCost||0) + (r.investContrib||0) + (r.idecoContrib||0) + (r.travelCost||0) + (r.edu||0) + (r.loan||0) + (r.car||0) + (r.appliance||0) + (r.eventCost||0);
+      } else {
+        val = r[f.key] || 0;
+      }
+      let color = f.color || '';
+      if (f.dynamic) color = val >= 0 ? 'var(--green)' : 'var(--red)';
+      const style = (color ? `color:${color};` : '') + (f.bold ? 'font-weight:bold;' : '');
+      const display = val === 0 ? '-' : Math.round(val).toLocaleString();
+      html += `<td style="${style}">${display}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  // ファンド別詳細（詳細モードのみ）
+  if (detailed && fundNames.length > 0) {
+    html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別残高</td></tr>`;
+    fundNames.forEach((name, fi) => {
+      html += '<tr>';
+      html += `<td class="row-header">┣ ${name}</td>`;
+      rows.forEach(r => {
+        const snap = r.fundSnapshots && r.fundSnapshots[fi];
+        if (!snap || snap.sold) {
+          html += '<td style="color:var(--text2)">-</td>';
+        } else {
+          html += `<td style="color:#3b82f6">${snap.balance ? snap.balance.toLocaleString() : '-'}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+
+    html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 運用益</td></tr>`;
+    fundNames.forEach((name, fi) => {
+      html += '<tr>';
+      html += `<td class="row-header">┣ ${name}</td>`;
+      rows.forEach(r => {
+        const snap = r.fundSnapshots && r.fundSnapshots[fi];
+        const val = snap ? snap.gain : 0;
+        html += `<td>${val ? val.toLocaleString() : '-'}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 配当金</td></tr>`;
+    fundNames.forEach((name, fi) => {
+      html += '<tr>';
+      html += `<td class="row-header">┣ ${name}</td>`;
+      rows.forEach(r => {
+        const snap = r.fundSnapshots && r.fundSnapshots[fi];
+        const val = snap ? snap.dividend : 0;
+        html += `<td style="color:var(--accent2)">${val ? val.toLocaleString() : '-'}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 定期売却</td></tr>`;
+    fundNames.forEach((name, fi) => {
+      html += '<tr>';
+      html += `<td class="row-header">┣ ${name}</td>`;
+      rows.forEach(r => {
+        const snap = r.fundSnapshots && r.fundSnapshots[fi];
+        const val = snap ? snap.withdraw : 0;
+        html += `<td style="color:var(--accent2)">${val ? val.toLocaleString() : '-'}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += `<tr class="section-header"><td class="row-header" colspan="${rows.length + 1}">ファンド別 積立額</td></tr>`;
+    fundNames.forEach((name, fi) => {
+      html += '<tr>';
+      html += `<td class="row-header">┣ ${name}</td>`;
+      rows.forEach(r => {
+        const snap = r.fundSnapshots && r.fundSnapshots[fi];
+        const val = snap ? snap.contribution : 0;
+        html += `<td>${val ? val.toLocaleString() : '-'}</td>`;
+      });
+      html += '</tr>';
+    });
+  }
+
+  tbody.innerHTML = html;
 }
 
 // ====== UI操作 ======
