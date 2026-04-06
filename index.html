@@ -207,8 +207,30 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
     <h3>退職金</h3>
     <div class="row">
       <div class="field"><label>自分の退職金<span class="unit">万円</span></label><input type="number" id="myRetireBonus" value="1500" step="100"></div>
-      <div class="field"><label>パートナー退職金<span class="unit">万円</span></label><input type="number" id="partnerRetireBonus" value="500" step="100"></div>
+      <div class="field field-narrow"><label>受取方法</label>
+        <select id="myRetireBonusMethod" onchange="toggleRetireBonusCombo('my'); updateRetireBonusDisplay(); simulate();">
+          <option value="lump">一時金</option>
+          <option value="annuity10">年金（10年）</option>
+          <option value="annuity20">年金（20年）</option>
+          <option value="combo">併用</option>
+        </select>
+      </div>
+      <div class="field" id="myRetireBonusComboField" style="display:none"><label>うち一時金<span class="unit">万円</span></label><input type="number" id="myRetireBonusComboLump" value="500" step="100"></div>
     </div>
+    <div class="info-box" id="myRetireBonusTaxInfo" style="font-size:0.85em"></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>パートナー退職金<span class="unit">万円</span></label><input type="number" id="partnerRetireBonus" value="500" step="100"></div>
+      <div class="field field-narrow"><label>受取方法</label>
+        <select id="partnerRetireBonusMethod" onchange="toggleRetireBonusCombo('partner'); updateRetireBonusDisplay(); simulate();">
+          <option value="lump">一時金</option>
+          <option value="annuity10">年金（10年）</option>
+          <option value="annuity20">年金（20年）</option>
+          <option value="combo">併用</option>
+        </select>
+      </div>
+      <div class="field" id="partnerRetireBonusComboField" style="display:none"><label>うち一時金<span class="unit">万円</span></label><input type="number" id="partnerRetireBonusComboLump" value="300" step="100"></div>
+    </div>
+    <div class="info-box" id="partnerRetireBonusTaxInfo" style="font-size:0.85em"></div>
   </div>
 </div>
 
@@ -218,6 +240,9 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
   <div class="section-body">
     <div class="info-box" id="pensionEstimateBox">
       年収から年金額を自動推計します。「手動設定」にチェックで直接入力も可能。
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="enablePensionTax" checked onchange="simulate()"> 年金・退職年金に税金を適用する</label>
     </div>
 
     <h3>自分の年金</h3>
@@ -393,6 +418,15 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
           </select>
         </div>
       </div>
+      <div class="row" id="idecoGapRow" style="display:none">
+        <div class="field"><label>退職金との受取間隔（10年ルール）</label>
+          <select id="idecoRetireBonusGap" onchange="updateIdecoDisplay(); simulate();">
+            <option value="same">同時受取（控除重複→税増）</option>
+            <option value="within10">10年以内（控除一部重複）</option>
+            <option value="over10" selected>10年以上（各自フル控除）</option>
+          </select>
+        </div>
+      </div>
       <div class="info-box" id="idecoEstimate">推計中...</div>
     </div>
   </div>
@@ -543,7 +577,7 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
           <tr>
             <th>年齢</th><th>収入</th><th>年金</th><th>配当/取崩</th><th>支出</th><th>学費</th>
             <th>ローン</th><th>車</th><th>家電</th><th>イベント</th>
-            <th>投資損益</th><th>iDeCo損益</th><th>切崩し</th><th>年間収支</th><th>現金</th><th>防衛</th><th>投資</th><th>iDeCo</th><th>総資産</th>
+            <th>投資損益</th><th>iDeCo損益</th><th>税金</th><th>切崩し</th><th>年間収支</th><th>現金</th><th>防衛</th><th>投資</th><th>iDeCo</th><th>総資産</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -865,9 +899,133 @@ function updateIdecoDisplay() {
     total *= (1 + ret);
   }
 
+  // iDeCo税額プレビュー
+  const idecoMethod = document.getElementById('idecoMethod').value;
+  let taxInfo = '';
+  if (idecoMethod === 'lump') {
+    const idecoServiceYears = years + waitYears; // 加入〜受取の年数
+    const gap = document.getElementById('idecoRetireBonusGap')?.value || 'over10';
+    const myRetireMethod = document.getElementById('myRetireBonusMethod')?.value || 'lump';
+    let deduction;
+    if ((myRetireMethod === 'lump' || myRetireMethod === 'combo') && gap !== 'over10') {
+      const companyServiceYears = Math.max(0, getVal('myRetireAge') - getVal('myWorkStartAge'));
+      const companyDeduction = calcRetirementDeduction(companyServiceYears);
+      deduction = Math.max(0, calcRetirementDeduction(idecoServiceYears) - companyDeduction);
+    } else {
+      deduction = calcRetirementDeduction(idecoServiceYears);
+    }
+    const taxable = Math.max(0, (total - deduction)) * 0.5;
+    const tax = taxable > 0 ? applyIncomeTaxBrackets(taxable) * 1.021 + taxable * 0.10 : 0;
+    const net = Math.round(total - tax);
+    taxInfo = `<br>一時金税額: 控除${Math.round(deduction)}万 / 課税所得${Math.round(taxable)}万 / <span style="color:#ef4444">税${Math.round(tax)}万</span> / 手取${net}万`;
+  } else {
+    const annuityYears = idecoMethod === 'annuity10' ? 10 : 20;
+    taxInfo = `<br>年金受取（${annuityYears}年）→ 公的年金等控除で毎年課税`;
+  }
+
+  // 10年ルール表示切替
+  const gapRow = document.getElementById('idecoGapRow');
+  const myRetireMethodVal = document.getElementById('myRetireBonusMethod')?.value || 'lump';
+  if (gapRow) {
+    gapRow.style.display = (idecoMethod === 'lump' && (myRetireMethodVal === 'lump' || myRetireMethodVal === 'combo')) ? '' : 'none';
+  }
+
   document.getElementById('idecoEstimate').innerHTML =
     `<b>受取時推計額: ${Math.round(total)}万円</b>（${startAge}歳時点）<br>` +
-    `拠出: ${years}年間 × ${monthly}万/月 = ${Math.round(monthly * 12 * years)}万円 + 運用益`;
+    `拠出: ${years}年間 × ${monthly}万/月 = ${Math.round(monthly * 12 * years)}万円 + 運用益` +
+    taxInfo;
+}
+
+// 退職金併用フィールドの表示切替
+function toggleRetireBonusCombo(prefix) {
+  const method = document.getElementById(`${prefix}RetireBonusMethod`)?.value || 'lump';
+  const field = document.getElementById(`${prefix}RetireBonusComboField`);
+  if (field) field.style.display = method === 'combo' ? '' : 'none';
+  // 10年ルール表示も更新
+  updateIdecoDisplay();
+}
+
+// ====== 税金計算関数群 ======
+
+// 退職所得控除（万円）
+function calcRetirementDeduction(serviceYears) {
+  if (serviceYears <= 0) return 0;
+  if (serviceYears <= 20) return Math.max(40 * serviceYears, 80);
+  return 800 + 70 * (serviceYears - 20);
+}
+
+// 所得税率テーブル（万円単位、復興特別所得税なし）
+function applyIncomeTaxBrackets(taxableIncome) {
+  if (taxableIncome <= 0) return 0;
+  if (taxableIncome <= 195) return taxableIncome * 0.05;
+  if (taxableIncome <= 330) return taxableIncome * 0.10 - 9.75;
+  if (taxableIncome <= 695) return taxableIncome * 0.20 - 42.75;
+  if (taxableIncome <= 900) return taxableIncome * 0.23 - 63.6;
+  if (taxableIncome <= 1800) return taxableIncome * 0.33 - 153.6;
+  if (taxableIncome <= 4000) return taxableIncome * 0.40 - 279.6;
+  return taxableIncome * 0.45 - 479.6;
+}
+
+// 退職所得の税額（万円）: 一時金受取時の所得税+住民税
+function calcRetirementTax(lumpSum, serviceYears) {
+  const deduction = calcRetirementDeduction(serviceYears);
+  const taxableIncome = Math.max(0, (lumpSum - deduction)) * 0.5;
+  const incomeTax = applyIncomeTaxBrackets(taxableIncome) * 1.021; // 復興特別所得税
+  const residentTax = taxableIncome * 0.10;
+  return Math.max(0, incomeTax + residentTax);
+}
+
+// 公的年金等控除額（万円）: 合計所得1000万以下を想定
+function calcPensionDeduction(annualIncome, age) {
+  if (annualIncome <= 0) return 0;
+  if (age >= 65) {
+    if (annualIncome <= 110) return annualIncome; // 全額控除
+    if (annualIncome <= 330) return annualIncome * 0.25 + 27.5;
+    if (annualIncome <= 410) return annualIncome * 0.15 + 68.5;
+    if (annualIncome <= 770) return annualIncome * 0.05 + 145.5;
+    return 155.5; // 770万超
+  } else {
+    if (annualIncome <= 60) return annualIncome; // 全額控除
+    if (annualIncome <= 130) return annualIncome * 0.25 + 27.5;
+    if (annualIncome <= 410) return annualIncome * 0.15 + 68.5;
+    if (annualIncome <= 770) return annualIncome * 0.05 + 145.5;
+    return 155.5; // 770万超
+  }
+}
+
+// 年金所得の税額（万円）: 公的年金等控除後の所得税+住民税
+function calcPensionTax(annualIncome, age) {
+  const deduction = calcPensionDeduction(annualIncome, age);
+  const taxableIncome = Math.max(0, annualIncome - deduction);
+  if (taxableIncome <= 0) return 0;
+  const incomeTax = applyIncomeTaxBrackets(taxableIncome) * 1.021;
+  const residentTax = taxableIncome * 0.10;
+  return Math.max(0, incomeTax + residentTax);
+}
+
+// 退職金税額プレビュー表示
+function updateRetireBonusDisplay() {
+  ['my', 'partner'].forEach(prefix => {
+    const el = document.getElementById(`${prefix}RetireBonusTaxInfo`);
+    if (!el) return;
+    const bonus = getVal(`${prefix}RetireBonus`);
+    const method = document.getElementById(`${prefix}RetireBonusMethod`)?.value || 'lump';
+    const workStart = getVal(`${prefix}WorkStartAge`);
+    const retireAge = getVal(`${prefix}RetireAge`);
+    const serviceYears = Math.max(0, retireAge - workStart);
+
+    if (method === 'lump' || method === 'combo') {
+      const lumpPart = method === 'combo' ? (getVal(`${prefix}RetireBonusComboLump`) || 0) : bonus;
+      const deduction = calcRetirementDeduction(serviceYears);
+      const taxable = Math.max(0, (lumpPart - deduction)) * 0.5;
+      const tax = calcRetirementTax(lumpPart, serviceYears);
+      const net = Math.round((lumpPart - tax) * 10) / 10;
+      el.innerHTML = `勤続${serviceYears}年 → 控除: ${Math.round(deduction)}万 / 課税所得: ${Math.round(taxable)}万 / <span style="color:#ef4444">税額: ${Math.round(tax)}万</span> / 手取: ${Math.round(net)}万`;
+    } else {
+      const annuityYears = method === 'annuity10' ? 10 : 20;
+      el.innerHTML = `年金方式（${annuityYears}年分割）→ 公的年金等控除で毎年課税`;
+    }
+  });
 }
 
 // ====== ローン月額計算（元利均等） ======
@@ -1539,6 +1697,7 @@ function updateIdecoLimit() {
 function simulate() {
   updatePensionDisplay();
   updateIdecoDisplay();
+  updateRetireBonusDisplay();
 
   const myAge = getVal('myAge');
   const endAge = getVal('endAge');
@@ -1556,6 +1715,11 @@ function simulate() {
   // 退職金
   const myRetireBonus = getVal('myRetireBonus');
   const partnerRetireBonus = getVal('partnerRetireBonus');
+  const myRetireBonusMethod = document.getElementById('myRetireBonusMethod')?.value || 'lump';
+  const partnerRetireBonusMethod = document.getElementById('partnerRetireBonusMethod')?.value || 'lump';
+  const myRetireBonusComboLump = getVal('myRetireBonusComboLump') || 0;
+  const partnerRetireBonusComboLump = getVal('partnerRetireBonusComboLump') || 0;
+  const enablePensionTax = isChecked('enablePensionTax');
 
   // 年金
   const myPensionStart = getVal('myPensionStartAge');
@@ -1634,6 +1798,9 @@ function simulate() {
   let idecoAnnualPayout = 0;
   let myRetireBonusPaid = false;
   let partnerRetireBonusPaid = false;
+  // 退職金年金方式用
+  let myRetireBonusAnnualPayout = 0, myRetireBonusPayoutLeft = 0;
+  let partnerRetireBonusAnnualPayout = 0, partnerRetireBonusPayoutLeft = 0;
 
   const labels = [], dataCash = [], dataInvest = [], dataIdeco = [], dataTotal = [], dataDrawdown = [], dataEmergency = [];
   const rows = [];
@@ -1674,14 +1841,61 @@ function simulate() {
       pensionIncome += partnerPensionInc;
     }
 
-    // 退職金
+    // 退職金（税金計算付き）
+    let retireTaxMy = 0, retireTaxPartner = 0;
     if (age === myRetire && !myRetireBonusPaid) {
-      cashAssets += myRetireBonus;
+      const serviceYears = Math.max(0, myRetire - getVal('myWorkStartAge'));
+      if (myRetireBonusMethod === 'lump') {
+        const tax = calcRetirementTax(myRetireBonus, serviceYears);
+        cashAssets += myRetireBonus - tax;
+        retireTaxMy = tax;
+      } else if (myRetireBonusMethod === 'annuity10' || myRetireBonusMethod === 'annuity20') {
+        const yrs = myRetireBonusMethod === 'annuity10' ? 10 : 20;
+        myRetireBonusAnnualPayout = myRetireBonus / yrs;
+        myRetireBonusPayoutLeft = yrs;
+      } else { // combo
+        const lumpPart = Math.min(myRetireBonusComboLump, myRetireBonus);
+        const annuityPart = myRetireBonus - lumpPart;
+        const tax = calcRetirementTax(lumpPart, serviceYears);
+        cashAssets += lumpPart - tax;
+        retireTaxMy = tax;
+        myRetireBonusAnnualPayout = annuityPart / 10;
+        myRetireBonusPayoutLeft = 10;
+      }
       myRetireBonusPaid = true;
     }
     if (pAge === partnerRetire && !partnerRetireBonusPaid) {
-      cashAssets += partnerRetireBonus;
+      const serviceYears = Math.max(0, partnerRetire - getVal('partnerWorkStartAge'));
+      if (partnerRetireBonusMethod === 'lump') {
+        const tax = calcRetirementTax(partnerRetireBonus, serviceYears);
+        cashAssets += partnerRetireBonus - tax;
+        retireTaxPartner = tax;
+      } else if (partnerRetireBonusMethod === 'annuity10' || partnerRetireBonusMethod === 'annuity20') {
+        const yrs = partnerRetireBonusMethod === 'annuity10' ? 10 : 20;
+        partnerRetireBonusAnnualPayout = partnerRetireBonus / yrs;
+        partnerRetireBonusPayoutLeft = yrs;
+      } else { // combo
+        const lumpPart = Math.min(partnerRetireBonusComboLump, partnerRetireBonus);
+        const annuityPart = partnerRetireBonus - lumpPart;
+        const tax = calcRetirementTax(lumpPart, serviceYears);
+        cashAssets += lumpPart - tax;
+        retireTaxPartner = tax;
+        partnerRetireBonusAnnualPayout = annuityPart / 10;
+        partnerRetireBonusPayoutLeft = 10;
+      }
       partnerRetireBonusPaid = true;
+    }
+    // 退職金年金方式の年次支給
+    let retireBonusAnnuityMy = 0, retireBonusAnnuityPartner = 0;
+    if (myRetireBonusPayoutLeft > 0) {
+      retireBonusAnnuityMy = myRetireBonusAnnualPayout;
+      cashAssets += retireBonusAnnuityMy;
+      myRetireBonusPayoutLeft--;
+    }
+    if (partnerRetireBonusPayoutLeft > 0) {
+      retireBonusAnnuityPartner = partnerRetireBonusAnnualPayout;
+      cashAssets += retireBonusAnnuityPartner;
+      partnerRetireBonusPayoutLeft--;
     }
 
     // 児童手当（2024年10月〜 全子ども対象、所得制限なし）
@@ -1801,21 +2015,33 @@ function simulate() {
 
     // --- iDeCo ---
     let idecoGain = 0;
+    let idecoTaxAmount = 0;
+    let idecoAnnuityThisYear = 0;
     if (hasIdeco) {
       if (age < 60) {
-        // 拠出期間: 運用 + 拠出
         idecoGain = idecoAssets * idecoReturn;
         idecoAssets += idecoGain + idecoMonthly * 12;
       } else if (age < idecoStartAge) {
-        // 拠出停止、運用のみ
         idecoGain = idecoAssets * idecoReturn;
         idecoAssets += idecoGain;
       } else {
-        // 受取開始
         if (!idecoReceiving) {
           idecoReceiving = true;
           if (idecoMethod === 'lump') {
-            cashAssets += idecoAssets;
+            // iDeCo一時金: 10年ルールで控除調整
+            const idecoServiceYears = Math.max(1, Math.min(60, myRetire) - myAge + Math.max(0, idecoStartAge - 60));
+            const gap = document.getElementById('idecoRetireBonusGap')?.value || 'over10';
+            let idecoDeduction;
+            if ((myRetireBonusMethod === 'lump' || myRetireBonusMethod === 'combo') && gap !== 'over10') {
+              const companyServiceYears = Math.max(0, myRetire - getVal('myWorkStartAge'));
+              const companyDed = calcRetirementDeduction(companyServiceYears);
+              idecoDeduction = Math.max(0, calcRetirementDeduction(idecoServiceYears) - companyDed);
+            } else {
+              idecoDeduction = calcRetirementDeduction(idecoServiceYears);
+            }
+            const taxableIdeco = Math.max(0, (idecoAssets - idecoDeduction)) * 0.5;
+            idecoTaxAmount = taxableIdeco > 0 ? applyIncomeTaxBrackets(taxableIdeco) * 1.021 + taxableIdeco * 0.10 : 0;
+            cashAssets += idecoAssets - idecoTaxAmount;
             idecoAnnualPayout = 0;
             idecoAssets = 0;
           } else {
@@ -1826,11 +2052,21 @@ function simulate() {
         if (idecoMethod !== 'lump' && idecoAssets > 0) {
           const payout = Math.min(idecoAnnualPayout, idecoAssets);
           idecoAssets -= payout;
+          idecoAnnuityThisYear = payout;
           cashAssets += payout;
-          // 残額も運用
           idecoGain = idecoAssets * idecoReturn;
           idecoAssets += idecoGain;
         }
+      }
+    }
+
+    // --- 年金所得税（公的年金+退職金年金+iDeCo年金を合算課税）---
+    let pensionTax = 0;
+    if (enablePensionTax) {
+      const totalPensionTypeIncome = pensionIncome + retireBonusAnnuityMy + retireBonusAnnuityPartner + idecoAnnuityThisYear;
+      if (totalPensionTypeIncome > 0) {
+        pensionTax = calcPensionTax(totalPensionTypeIncome, age);
+        cashAssets -= pensionTax;
       }
     }
 
@@ -1936,6 +2172,10 @@ function simulate() {
       invest: Math.round(investAssets),
       ideco: Math.round(idecoAssets),
       total: Math.round(totalAssets),
+      retireTax: Math.round(retireTaxMy + retireTaxPartner),
+      idecoTax: Math.round(idecoTaxAmount),
+      pensionTax: Math.round(pensionTax),
+      totalTax: Math.round(retireTaxMy + retireTaxPartner + idecoTaxAmount + pensionTax),
       fundSnapshots: fundSnapshots
     });
   }
@@ -2133,6 +2373,7 @@ function renderTable(rows) {
       <td>${r.car > 0 ? r.car.toLocaleString() : '-'}</td><td>${r.appliance > 0 ? r.appliance.toLocaleString() : '-'}</td><td>${ev}</td>
       <td>${r.investGain.toLocaleString()}</td>
       <td>${r.idecoGain.toLocaleString()}</td>
+      <td style="color:#ef4444">${r.totalTax > 0 ? '-' + r.totalTax.toLocaleString() : '-'}</td>
       <td style="color:var(--red)">${r.drawdown > 0 ? '-' + r.drawdown.toLocaleString() : '-'}</td>
       <td style="color:${r.annual>=0?'var(--green)':'var(--red)'}">${r.annual.toLocaleString()}</td>
       <td>${r.cash.toLocaleString()}</td><td style="color:var(--yellow)">${r.emergency.toLocaleString()}</td><td style="color:#3b82f6">${r.invest.toLocaleString()}</td><td style="color:#8b5cf6">${r.ideco.toLocaleString()}</td>
@@ -2183,6 +2424,11 @@ function renderSpreadTable(rows, detailed) {
     { key: 'investGain', label: '投資損益', color: '' },
     { key: 'idecoGain', label: 'iDeCo損益', color: '' },
     { key: 'drawdown', label: '資産切崩し', color: 'var(--red)' },
+    { section: '税金' },
+    { key: 'retireTax', label: '退職所得税', color: '#ef4444' },
+    { key: 'idecoTax', label: 'iDeCo税', color: '#ef4444' },
+    { key: 'pensionTax', label: '年金税', color: '#ef4444' },
+    { key: 'totalTax', label: '税金合計', color: '#ef4444', bold: true },
     { section: '収支・資産' },
     { key: 'annual', label: '年間収支', color: '', dynamic: true, bold: true },
     { key: 'cash', label: '現金', color: '' },
@@ -2217,6 +2463,11 @@ function renderSpreadTable(rows, detailed) {
     { key: 'investGain', label: '┣ 投資損益', color: '' },
     { key: 'idecoGain', label: '┣ iDeCo損益', color: '' },
     { key: 'drawdown', label: '┣ 資産切崩し', color: 'var(--red)' },
+    { section: '税金' },
+    { key: 'retireTax', label: '┣ 退職所得税', color: '#ef4444' },
+    { key: 'idecoTax', label: '┣ iDeCo税', color: '#ef4444' },
+    { key: 'pensionTax', label: '┣ 年金税', color: '#ef4444' },
+    { key: 'totalTax', label: '税金合計', color: '#ef4444', bold: true },
     { section: '収支・資産' },
     { key: 'annual', label: '年間収支', color: '', dynamic: true, bold: true },
     { key: 'cash', label: '┣ 現金', color: '' },
