@@ -602,27 +602,83 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
 
 <script>
 // ====== 定数 ======
+// 教育費プリセット（PIVOT動画 2025年版データ準拠、年額・万円）
 const EDU_COST = {
-  elementary: { public: 35, private: 167 },
-  middle:     { public: 54, private: 144 },
-  high:       { public: 51, private: 105 },
-  univ:       { public: 70, private_arts: 120, private_sci: 170 }
+  nursery:      { public_auth: 4, none: 0 },
+  kindergarten: { public: 20, private_general: 55, private_premium: 100, none: 0 },
+  elementary:   { public: 12, private: 110 },
+  middle:       { public: 19, private: 100 },
+  high:         { public: 35, private: 75 },
+  univ:         {
+    public_4yr: 61, public_6yr: 58,
+    private_arts: 100, private_sci: 137, private_med: 333,
+    none: 0
+  }
 };
 
-// ====== 子ども管理（最大5人） ======
-let children = [
-  { id: 1, name: '第1子', age: 3, eduElementary: 'public', eduMiddle: 'public', eduHigh: 'public', eduUniv: 'public', lessons: { elementary: [], middle: [], high: [], univ: [] } }
+// 塾・習い事プリセット（年額・万円、月額に変換して使用）
+const LESSON_PRESETS = [
+  // 中学受験塾（小4-小6で活性化）
+  { id:'sapix',      name:'SAPIX',          annual:113, ages:[9,10,11],   stage:'elementary', category:'中学受験塾' },
+  { id:'nichinoken', name:'日能研',          annual:101, ages:[9,10,11],   stage:'elementary', category:'中学受験塾' },
+  { id:'yotsuya',    name:'四谷大塚',        annual:143, ages:[9,10,11],   stage:'elementary', category:'中学受験塾' },
+  { id:'waseda',     name:'早稲田アカデミー', annual:143, ages:[9,10,11],   stage:'elementary', category:'中学受験塾' },
+  // 高校受験塾（中1-中3）
+  { id:'juku_group', name:'集団塾(5教科)',   annual:30,  ages:[12,13,14],  stage:'middle',     category:'高校受験塾' },
+  { id:'juku_indiv', name:'個別指導塾',      annual:40,  ages:[12,13,14],  stage:'middle',     category:'高校受験塾' },
+  // 大学受験塾（高1-高3）
+  { id:'juku_5kyoka',name:'5教科塾',         annual:83,  ages:[15,16,17],  stage:'high',       category:'大学受験塾' },
+  { id:'juku_uni_indiv',name:'大学受験個別', annual:100, ages:[15,16,17],  stage:'high',       category:'大学受験塾' },
+  // 学習教室（小学生想定）
+  { id:'kumon',      name:'KUMON',          annual:10,  ages:[6,7,8,9,10,11], stage:'elementary', category:'学習教室' },
+  { id:'ecc',        name:'ECCジュニア',     annual:12,  ages:[6,7,8,9,10,11], stage:'elementary', category:'学習教室' },
+  // プログラミング
+  { id:'ncodelabo',  name:'N Code Labo',    annual:32,  ages:[9,10,11,12,13,14], stage:'elementary', category:'プログラミング' },
+  { id:'hum_robot',  name:'ヒューマンロボット',annual:22,ages:[6,7,8,9,10,11], stage:'elementary', category:'プログラミング' },
+  // 情操教育（幼児想定）
+  { id:'yamaha',     name:'ヤマハ音楽教室',  annual:17,  ages:[3,4,5],     stage:'kindergarten', category:'情操教育' },
+  { id:'tomas',      name:'TOMAS体操',      annual:16,  ages:[3,4,5],     stage:'kindergarten', category:'情操教育' },
+  // 汎用習い事
+  { id:'piano',      name:'ピアノ個人',      annual:7,   ages:[6,7,8,9,10,11], stage:'elementary', category:'習い事' },
+  { id:'english',    name:'英会話',          annual:12,  ages:[6,7,8,9,10,11], stage:'elementary', category:'習い事' },
+  { id:'english_mid',name:'英会話(中学生)',  annual:12,  ages:[12,13,14],  stage:'middle',     category:'習い事' },
 ];
+
+// ====== 子ども管理（最大5人） ======
+function defaultChild(id, name, age) {
+  return {
+    id, name, age,
+    eduNursery: 'public_auth',
+    eduKindergarten: 'public',
+    eduElementary: 'public',
+    eduMiddle: 'public',
+    eduHigh: 'public',
+    eduUniv: 'public_4yr',
+    lessons: { nursery: [], kindergarten: [], elementary: [], middle: [], high: [], univ: [] }
+  };
+}
+
+// 旧データ→新スキーマのマイグレーション
+function migrateChild(child) {
+  if (!child.eduNursery) child.eduNursery = 'public_auth';
+  if (!child.eduKindergarten) child.eduKindergarten = 'public';
+  if (child.eduUniv === 'public') child.eduUniv = 'public_4yr'; // 旧 → 新
+  if (!child.lessons) child.lessons = {};
+  if (!child.lessons.nursery) child.lessons.nursery = [];
+  if (!child.lessons.kindergarten) child.lessons.kindergarten = [];
+  if (!child.lessons.elementary) child.lessons.elementary = [];
+  if (!child.lessons.middle) child.lessons.middle = [];
+  if (!child.lessons.high) child.lessons.high = [];
+  if (!child.lessons.univ) child.lessons.univ = [];
+  return child;
+}
+
+let children = [defaultChild(1, '第1子', 3)];
 
 function addChild() {
   if (children.length >= 5) return;
   const n = children.length + 1;
-  children.push({
-    id: Math.floor(Date.now() * 1000 + Math.random() * 1000000),
-    name: `第${n}子`, age: 0,
-    eduElementary: 'public', eduMiddle: 'public', eduHigh: 'public', eduUniv: 'public',
-    lessons: { elementary: [], middle: [], high: [], univ: [] }
-  });
+  children.push(defaultChild(Math.floor(Date.now() * 1000 + Math.random() * 1000000), `第${n}子`, 0));
   renderChildren();
   simulate();
 }
@@ -666,6 +722,64 @@ function updateChildLesson(childId, stage, lessonId, key, value) {
   const l = c.lessons[stage].find(e => e.id === lessonId);
   if (l) l[key] = value;
   simulate();
+}
+
+// 習い事プリセットメニューを開く（モーダル風オーバーレイ）
+function openLessonPresetMenu(childId, stage, evt) {
+  if (evt) evt.stopPropagation();
+  // 既存メニューを削除
+  const old = document.getElementById('lessonPresetMenu');
+  if (old) old.remove();
+
+  // この stage に該当するプリセット + 汎用も表示
+  const filtered = LESSON_PRESETS.filter(p => p.stage === stage);
+  const grouped = {};
+  filtered.forEach(p => {
+    if (!grouped[p.category]) grouped[p.category] = [];
+    grouped[p.category].push(p);
+  });
+
+  const menu = document.createElement('div');
+  menu.id = 'lessonPresetMenu';
+  menu.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  menu.onclick = (e) => { if (e.target === menu) menu.remove(); };
+
+  let html = `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="color:var(--accent2);margin:0">プリセットから選択</h3>
+      <button class="btn-small" onclick="document.getElementById('lessonPresetMenu').remove()">×</button>
+    </div>
+    <div style="font-size:0.78em;color:var(--muted);margin-bottom:10px">${LESSON_STAGES[stage]?.label || ''}向け（PIVOT動画 2025年版データ）</div>`;
+
+  if (Object.keys(grouped).length === 0) {
+    html += `<div style="color:var(--muted);padding:12px;text-align:center">この段階向けのプリセットはありません</div>`;
+  } else {
+    for (const [cat, items] of Object.entries(grouped)) {
+      html += `<div style="margin-bottom:10px"><div style="font-size:0.82em;font-weight:bold;color:var(--accent);margin-bottom:4px">${cat}</div>`;
+      items.forEach(p => {
+        const monthly = (p.annual / 12).toFixed(1);
+        const ageRange = `${Math.min(...p.ages)}〜${Math.max(...p.ages)}歳`;
+        html += `<button onclick="applyLessonPreset(${childId},'${stage}','${p.id}')" style="display:block;width:100%;text-align:left;padding:8px 10px;margin-bottom:4px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:0.85em">
+          <div style="font-weight:bold">${p.name}</div>
+          <div style="font-size:0.78em;color:var(--muted)">年${p.annual}万 / 月${monthly}万 / ${ageRange}</div>
+        </button>`;
+      });
+      html += `</div>`;
+    }
+  }
+  html += `</div>`;
+  menu.innerHTML = html;
+  document.body.appendChild(menu);
+}
+
+// プリセットを適用
+function applyLessonPreset(childId, stage, presetId) {
+  const preset = LESSON_PRESETS.find(p => p.id === presetId);
+  if (!preset) return;
+  const monthly = (preset.annual / 12).toFixed(2);
+  addChildLesson(childId, stage, preset.name, monthly, preset.ages);
+  const menu = document.getElementById('lessonPresetMenu');
+  if (menu) menu.remove();
 }
 
 function toggleChildLessonGrade(childId, stage, lessonId, age) {
@@ -712,7 +826,10 @@ function renderEduStage(child, stage, label, ageRange, options) {
         <select onchange="updateChild(${child.id},'edu${stageKey}',this.value)" style="font-size:0.8em">${selectHTML}</select>
       </div>
       ${renderChildLessons(child, stage)}
-      <button class="btn-small btn-add" onclick="addChildLesson(${child.id},'${stage}')" style="font-size:0.72em;margin-top:2px">+ 習い事</button>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px">
+        <button class="btn-small btn-add" onclick="addChildLesson(${child.id},'${stage}')" style="font-size:0.72em">+ 習い事</button>
+        <button class="btn-small" onclick="openLessonPresetMenu(${child.id},'${stage}',event)" style="font-size:0.72em;border-color:var(--accent2);color:var(--accent2)">+ プリセット</button>
+      </div>
     </div>`;
 }
 
@@ -726,17 +843,35 @@ function renderChildren() {
         <div class="field" style="width:100px;margin:0"><label style="font-size:0.75em">現在の年齢</label><input type="number" value="${c.age}" min="0" max="22" oninput="updateChild(${c.id},'age',parseInt(this.value)||0);renderChildren()"></div>
         ${children.length > 1 ? `<button class="btn-small btn-danger" onclick="removeChild(${c.id})" style="font-size:0.75em">削除</button>` : ''}
       </div>
+      ${renderEduStage(c, 'nursery', '保育園', '0〜2歳', [
+        {value:'public_auth', label:'認可保育所（4万/年）'},
+        {value:'none', label:'通園しない（0円）'}
+      ])}
+      ${renderEduStage(c, 'kindergarten', '幼稚園', '3〜5歳', [
+        {value:'public', label:'公立（20万/年）'},
+        {value:'private_general', label:'私立 一般（55万/年）'},
+        {value:'private_premium', label:'私立 高級（100万/年）'},
+        {value:'none', label:'通園しない（0円）'}
+      ])}
       ${renderEduStage(c, 'elementary', '小学校', '6〜11歳', [
-        {value:'public', label:'公立（35万/年）'}, {value:'private', label:'私立（167万/年）'}
+        {value:'public', label:'公立（12万/年）'},
+        {value:'private', label:'私立（110万/年）'}
       ])}
       ${renderEduStage(c, 'middle', '中学校', '12〜14歳', [
-        {value:'public', label:'公立（54万/年）'}, {value:'private', label:'私立（144万/年）'}
+        {value:'public', label:'公立（19万/年）'},
+        {value:'private', label:'私立（100万/年）'}
       ])}
       ${renderEduStage(c, 'high', '高校', '15〜17歳', [
-        {value:'public', label:'公立（51万/年）'}, {value:'private', label:'私立（105万/年）'}
+        {value:'public', label:'公立（35万/年）'},
+        {value:'private', label:'私立（75万/年）'}
       ])}
-      ${renderEduStage(c, 'univ', '大学', '18〜21歳', [
-        {value:'public', label:'国公立（70万/年）'}, {value:'private_arts', label:'私立文系（120万/年）'}, {value:'private_sci', label:'私立理系（170万/年）'}
+      ${renderEduStage(c, 'univ', '大学', '18〜21歳（医・薬は18〜23歳）', [
+        {value:'public_4yr', label:'国公立 4年制（61万/年）'},
+        {value:'public_6yr', label:'国公立 6年制 医・薬（58万/年）'},
+        {value:'private_arts', label:'私立 文系（100万/年）'},
+        {value:'private_sci', label:'私立 理系（137万/年）'},
+        {value:'private_med', label:'私立 医学部（333万/年）'},
+        {value:'none', label:'進学しない（0円）'}
       ])}
     </div>
   `).join('');
@@ -781,14 +916,23 @@ function calcChildAllowance(childrenList, yearOffset) {
 function getEduCostForChild(child, yearOffset) {
   const cAge = child.age + yearOffset;
   let cost = 0;
-  if (cAge >= 6 && cAge <= 11) cost = EDU_COST.elementary[child.eduElementary] || 0;
+  if (cAge >= 0 && cAge <= 2) cost = EDU_COST.nursery[child.eduNursery] || 0;
+  else if (cAge >= 3 && cAge <= 5) cost = EDU_COST.kindergarten[child.eduKindergarten] || 0;
+  else if (cAge >= 6 && cAge <= 11) cost = EDU_COST.elementary[child.eduElementary] || 0;
   else if (cAge >= 12 && cAge <= 14) cost = EDU_COST.middle[child.eduMiddle] || 0;
   else if (cAge >= 15 && cAge <= 17) cost = EDU_COST.high[child.eduHigh] || 0;
-  else if (cAge >= 18 && cAge <= 21) cost = EDU_COST.univ[child.eduUniv] || 0;
+  else if (cAge >= 18 && cAge <= 23) {
+    // 大学: 6年制(医・薬)は18-23、4年制は18-21のみ
+    const univType = child.eduUniv;
+    const is6yr = (univType === 'public_6yr' || univType === 'private_med');
+    if (cAge <= 21 || is6yr) {
+      cost = EDU_COST.univ[univType] || 0;
+    }
+  }
   // 習い事
   for (const stage of Object.keys(child.lessons)) {
     for (const l of child.lessons[stage]) {
-      if (l.activeGrades.includes(cAge)) {
+      if (l.activeGrades && l.activeGrades.includes(cAge)) {
         cost += (parseFloat(l.monthly) || 0) * 12;
       }
     }
@@ -809,6 +953,12 @@ function getTotalChildAllowance(yearOffset) {
 // ====== 習い事管理 ======
 // 各ステージの学年定義: { stage: ステージ名, grades: [{ label, childAge }] }
 const LESSON_STAGES = {
+  nursery: { label: '保育園', grades: [
+    { label: '0歳', age: 0 }, { label: '1歳', age: 1 }, { label: '2歳', age: 2 }
+  ]},
+  kindergarten: { label: '幼稚園', grades: [
+    { label: '年少', age: 3 }, { label: '年中', age: 4 }, { label: '年長', age: 5 }
+  ]},
   elementary: { label: '小学校', grades: [
     { label: '小1', age: 6 }, { label: '小2', age: 7 }, { label: '小3', age: 8 },
     { label: '小4', age: 9 }, { label: '小5', age: 10 }, { label: '小6', age: 11 }
@@ -820,7 +970,8 @@ const LESSON_STAGES = {
     { label: '高1', age: 15 }, { label: '高2', age: 16 }, { label: '高3', age: 17 }
   ]},
   univ: { label: '大学', grades: [
-    { label: '大1', age: 18 }, { label: '大2', age: 19 }, { label: '大3', age: 20 }, { label: '大4', age: 21 }
+    { label: '大1', age: 18 }, { label: '大2', age: 19 }, { label: '大3', age: 20 },
+    { label: '大4', age: 21 }, { label: '大5', age: 22 }, { label: '大6', age: 23 }
   ]}
 };
 
@@ -2639,13 +2790,15 @@ function getAllInputValues() {
   inputs._travels = travels.map(t => ({ name: t.name, cost: t.cost, frequency: t.frequency }));
   inputs._children = children.map(c => ({
     name: c.name, age: c.age,
+    eduNursery: c.eduNursery, eduKindergarten: c.eduKindergarten,
     eduElementary: c.eduElementary, eduMiddle: c.eduMiddle,
     eduHigh: c.eduHigh, eduUniv: c.eduUniv,
     lessons: {}
   }));
   inputs._children.forEach((sc, i) => {
-    ['elementary','middle','high','univ'].forEach(s => {
-      sc.lessons[s] = children[i].lessons[s].map(l => ({ name: l.name, monthly: l.monthly, activeGrades: l.activeGrades }));
+    ['nursery','kindergarten','elementary','middle','high','univ'].forEach(s => {
+      const arr = (children[i].lessons && children[i].lessons[s]) || [];
+      sc.lessons[s] = arr.map(l => ({ name: l.name, monthly: l.monthly, activeGrades: l.activeGrades }));
     });
   });
   inputs._bankAccountsMy = bankAccountsMy.map(a => ({ name: a.name, balance: a.balance }));
@@ -2705,14 +2858,14 @@ function setAllInputValues(data) {
     children = data._children.map(c => {
       const child = {
         ...c, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000),
-        lessons: { elementary: [], middle: [], high: [], univ: [] }
+        lessons: { nursery: [], kindergarten: [], elementary: [], middle: [], high: [], univ: [] }
       };
-      ['elementary','middle','high','univ'].forEach(s => {
+      ['nursery','kindergarten','elementary','middle','high','univ'].forEach(s => {
         if (c.lessons && c.lessons[s]) {
           child.lessons[s] = c.lessons[s].map(l => ({ ...l, id: Math.floor(Date.now() * 1000 + Math.random() * 1000000) }));
         }
       });
-      return child;
+      return migrateChild(child);
     });
     renderChildren();
   }
