@@ -1315,9 +1315,9 @@ function runDiagnosis() {
     } else {
       const diff = actualAmount - idealAmount;
       const diffPct = (diff / idealAmount) * 100;
+      // 使い過ぎは警告するが、理想より少ない＝節約できているのでOK扱い
       if (diffPct >= 30) { status = '使いすぎ'; color = '#ef4444'; icon = '🔴'; }
       else if (diffPct >= 10) { status = 'やや多い'; color = '#fbbf24'; icon = '🟡'; }
-      else if (diffPct <= -30) { status = '少なすぎ?'; color = '#60a5fa'; icon = '🔵'; }
       else { status = 'OK'; color = '#4ade80'; icon = '🟢'; }
     }
     results.push({ key, label: CATEGORY_LABELS[key], idealPct, idealAmount, actualAmount, status, color, icon });
@@ -1437,7 +1437,7 @@ function showDiagnosisModal(d) {
     ${tipsHtml}
     ${avgHtml}
     <div style="font-size:0.75em;color:var(--text2);margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
-      理想%: FP横山光昭氏「家計の黄金比率」、平均: 総務省統計局 家計調査2024年 ／ 判定基準: 理想±10%以内=OK、+10〜30%=やや多い、+30%以上=使いすぎ
+      理想%: FP横山光昭氏「家計の黄金比率」、平均: 総務省統計局 家計調査2024年 ／ 判定基準: 理想+10%未満=OK、+10〜30%=やや多い、+30%以上=使いすぎ（理想より少ない場合は節約できているのでOK扱い）
     </div>
   </div>`;
   document.body.appendChild(menu);
