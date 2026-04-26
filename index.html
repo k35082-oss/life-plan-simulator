@@ -692,7 +692,32 @@ function removeChild(id) {
 function updateChild(id, key, value) {
   const c = children.find(e => e.id === id);
   if (c) c[key] = value;
+  updateChildCostSummaries();
   simulate();
+}
+
+// 子どもの総費用サマリー（青枠＋赤枠）だけを差分更新（フォーカス維持）
+function updateChildCostSummaries() {
+  // 全員サマリー
+  const allEl = document.getElementById('allChildrenCostSummary');
+  if (allEl && children.length > 1) {
+    const total = children.reduce((s, c) => s + getChildLifetimeEduCost(c), 0);
+    allEl.innerHTML = `<span style="color:var(--accent2);font-weight:bold">全員の大学卒業までの総費用合計: </span>
+      <span style="font-size:1.1em;font-weight:bold;color:var(--accent)">${Math.round(total).toLocaleString()}万円</span>
+      <span style="color:var(--text2);font-size:0.82em;margin-left:6px">（学費＋習い事、現在〜大学卒業まで）</span>`;
+  }
+  // 個別サマリー
+  children.forEach(c => {
+    const el = document.getElementById(`childCostSummary_${c.id}`);
+    if (!el) return;
+    const breakdown = getChildLifetimeEduBreakdown(c);
+    const yearsLeft = Math.max(0, 23 - c.age);
+    el.innerHTML = `<div style="color:var(--accent2);font-weight:bold;margin-bottom:2px">大学卒業までの総費用（今後${yearsLeft}年間）</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+        <span style="font-size:1.15em;font-weight:bold;color:var(--accent)">${Math.round(breakdown.total).toLocaleString()}万円</span>
+        <span style="color:var(--text2);font-size:0.85em">学費 ${Math.round(breakdown.school).toLocaleString()}万 + 習い事 ${Math.round(breakdown.lessons).toLocaleString()}万</span>
+      </div>`;
+  });
 }
 
 function addChildLesson(childId, stage, name='', monthly='', activeGrades=null) {
@@ -721,6 +746,7 @@ function updateChildLesson(childId, stage, lessonId, key, value) {
   if (!c) return;
   const l = c.lessons[stage].find(e => e.id === lessonId);
   if (l) l[key] = value;
+  updateChildCostSummaries();
   simulate();
 }
 
@@ -839,7 +865,7 @@ function renderChildren() {
   // 全子どもの総費用（複数人の場合のサマリー用）
   const totalAllChildren = children.reduce((s, c) => s + getChildLifetimeEduCost(c), 0);
   const summaryHTML = children.length > 1
-    ? `<div class="info-box" style="background:rgba(233,69,96,0.12);border-color:var(--accent);color:var(--text);font-size:0.95em;margin-bottom:10px">
+    ? `<div id="allChildrenCostSummary" class="info-box" style="background:rgba(233,69,96,0.12);border-color:var(--accent);color:var(--text);font-size:0.95em;margin-bottom:10px">
         <span style="color:var(--accent2);font-weight:bold">全員の大学卒業までの総費用合計: </span>
         <span style="font-size:1.1em;font-weight:bold;color:var(--accent)">${Math.round(totalAllChildren).toLocaleString()}万円</span>
         <span style="color:var(--text2);font-size:0.82em;margin-left:6px">（学費＋習い事、現在〜大学卒業まで）</span>
@@ -856,7 +882,7 @@ function renderChildren() {
         <div class="field" style="width:100px;margin:0"><label style="font-size:0.75em">現在の年齢</label><input type="number" value="${c.age}" min="0" max="22" oninput="updateChild(${c.id},'age',parseInt(this.value)||0);renderChildren()"></div>
         ${children.length > 1 ? `<button class="btn-small btn-danger" onclick="removeChild(${c.id})" style="font-size:0.75em">削除</button>` : ''}
       </div>
-      <div style="background:rgba(0,210,255,0.08);border:1px solid rgba(0,210,255,0.25);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:0.85em">
+      <div id="childCostSummary_${c.id}" style="background:rgba(0,210,255,0.08);border:1px solid rgba(0,210,255,0.25);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:0.85em">
         <div style="color:var(--accent2);font-weight:bold;margin-bottom:2px">大学卒業までの総費用（今後${yearsLeft}年間）</div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
           <span style="font-size:1.15em;font-weight:bold;color:var(--accent)">${Math.round(breakdown.total).toLocaleString()}万円</span>
