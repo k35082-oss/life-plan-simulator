@@ -836,12 +836,32 @@ function renderEduStage(child, stage, label, ageRange, options) {
 function renderChildren() {
   const container = document.getElementById('childrenContainer');
   if (!container) return;
-  container.innerHTML = children.map((c, idx) => `
+  // 全子どもの総費用（複数人の場合のサマリー用）
+  const totalAllChildren = children.reduce((s, c) => s + getChildLifetimeEduCost(c), 0);
+  const summaryHTML = children.length > 1
+    ? `<div class="info-box" style="background:rgba(233,69,96,0.12);border-color:var(--accent);color:var(--text);font-size:0.95em;margin-bottom:10px">
+        <span style="color:var(--accent2);font-weight:bold">全員の大学卒業までの総費用合計: </span>
+        <span style="font-size:1.1em;font-weight:bold;color:var(--accent)">${Math.round(totalAllChildren).toLocaleString()}万円</span>
+        <span style="color:var(--text2);font-size:0.82em;margin-left:6px">（学費＋習い事、現在〜大学卒業まで）</span>
+       </div>`
+    : '';
+
+  container.innerHTML = summaryHTML + children.map((c, idx) => {
+    const breakdown = getChildLifetimeEduBreakdown(c);
+    const yearsLeft = Math.max(0, 23 - c.age);
+    return `
     <div style="border:1px solid var(--accent2);border-radius:8px;padding:10px;margin-bottom:10px;position:relative">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
         <input type="text" value="${c.name}" onchange="updateChild(${c.id},'name',this.value)" style="width:80px;font-weight:bold;font-size:0.9em;background:transparent;border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--fg)">
         <div class="field" style="width:100px;margin:0"><label style="font-size:0.75em">現在の年齢</label><input type="number" value="${c.age}" min="0" max="22" oninput="updateChild(${c.id},'age',parseInt(this.value)||0);renderChildren()"></div>
         ${children.length > 1 ? `<button class="btn-small btn-danger" onclick="removeChild(${c.id})" style="font-size:0.75em">削除</button>` : ''}
+      </div>
+      <div style="background:rgba(0,210,255,0.08);border:1px solid rgba(0,210,255,0.25);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:0.85em">
+        <div style="color:var(--accent2);font-weight:bold;margin-bottom:2px">大学卒業までの総費用（今後${yearsLeft}年間）</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+          <span style="font-size:1.15em;font-weight:bold;color:var(--accent)">${Math.round(breakdown.total).toLocaleString()}万円</span>
+          <span style="color:var(--text2);font-size:0.85em">学費 ${Math.round(breakdown.school).toLocaleString()}万 + 習い事 ${Math.round(breakdown.lessons).toLocaleString()}万</span>
+        </div>
       </div>
       ${renderEduStage(c, 'nursery', '保育園', '0〜2歳', [
         {value:'public_auth', label:'認可保育所（4万/年）'},
@@ -874,7 +894,8 @@ function renderChildren() {
         {value:'none', label:'進学しない（0円）'}
       ])}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // 児童手当 (2024年10月〜 所得制限撤廃)
@@ -943,6 +964,46 @@ function getEduCostForChild(child, yearOffset) {
 // 全子どもの学費合計
 function getTotalEduCost(yearOffset) {
   return children.reduce((s, c) => s + getEduCostForChild(c, yearOffset), 0);
+}
+
+// 子ども1人の「現在〜大学卒業まで」の総教育費（学費＋習い事を全期間合算）
+function getChildLifetimeEduCost(child) {
+  let total = 0;
+  const maxYearOffset = Math.max(0, 23 - child.age);
+  for (let off = 0; off <= maxYearOffset; off++) {
+    total += getEduCostForChild(child, off);
+  }
+  return total;
+}
+
+// 子ども1人の費用内訳（学費 vs 習い事を分離）
+function getChildLifetimeEduBreakdown(child) {
+  let school = 0;
+  let lessons = 0;
+  const maxYearOffset = Math.max(0, 23 - child.age);
+  for (let off = 0; off <= maxYearOffset; off++) {
+    const cAge = child.age + off;
+    // 学費部分のみ
+    if (cAge >= 0 && cAge <= 2) school += EDU_COST.nursery[child.eduNursery] || 0;
+    else if (cAge >= 3 && cAge <= 5) school += EDU_COST.kindergarten[child.eduKindergarten] || 0;
+    else if (cAge >= 6 && cAge <= 11) school += EDU_COST.elementary[child.eduElementary] || 0;
+    else if (cAge >= 12 && cAge <= 14) school += EDU_COST.middle[child.eduMiddle] || 0;
+    else if (cAge >= 15 && cAge <= 17) school += EDU_COST.high[child.eduHigh] || 0;
+    else if (cAge >= 18 && cAge <= 23) {
+      const u = child.eduUniv;
+      const is6yr = (u === 'public_6yr' || u === 'private_med');
+      if (cAge <= 21 || is6yr) school += EDU_COST.univ[u] || 0;
+    }
+    // 習い事部分
+    for (const stage of Object.keys(child.lessons)) {
+      for (const l of child.lessons[stage]) {
+        if (l.activeGrades && l.activeGrades.includes(cAge)) {
+          lessons += (parseFloat(l.monthly) || 0) * 12;
+        }
+      }
+    }
+  }
+  return { school, lessons, total: school + lessons };
 }
 
 // 全子どもの児童手当合計
