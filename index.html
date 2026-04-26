@@ -152,6 +152,7 @@ tr.highlight td { background: rgba(233,69,96,0.15); }
     <button onclick="loadFromLocal()">読込</button>
     <button onclick="exportJSON()">JSON出力</button>
     <button onclick="importJSON()">JSON読込</button>
+    <button onclick="runDiagnosis()" style="border-color:var(--accent2);color:var(--accent2)">🏠 診断</button>
     <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileImport(event)">
   </div>
   <div id="chart-container">
@@ -1181,6 +1182,265 @@ function toggleRetireBonusCombo(prefix) {
   if (field) field.style.display = method === 'combo' ? '' : 'none';
   // 10年ルール表示も更新
   updateIdecoDisplay();
+}
+
+// ====== 家計診断機能 ======
+
+// FP黄金比率（横山光昭氏ベース、手取り月収に対する%）
+const GOLDEN_RATIOS = {
+  single:  { food:18, housing:28, utility:6, comm:6,  edu:0,  insurance:4, daily:3, social:5, other:6,  savings:17 },
+  couple:  { food:15, housing:25, utility:5, comm:6,  edu:0,  insurance:4, daily:2, social:2, other:3,  savings:20 },
+  small:   { food:14, housing:25, utility:6, comm:5,  edu:10, insurance:6, daily:2, social:2, other:3,  savings:12 },
+  teens:   { food:15, housing:25, utility:6, comm:6,  edu:12, insurance:6, daily:2, social:2, other:3,  savings:8  }
+};
+
+const HOUSEHOLD_LABELS = {
+  single: '単身（シングル）',
+  couple: '夫婦のみ（子なし）',
+  small:  '夫婦＋小学生以下',
+  teens:  '夫婦＋中高生（または大学生混在）'
+};
+
+// 家計調査2024年 平均消費支出（月額・万円）
+const KAKEI_AVG_2024 = {
+  single:   { total: 18.4, food: 4.58, housing: 3.14 },
+  couple:   { total: 31.7, food: 6.34 /* 食料20% */ },
+  family3:  { total: 30.0 },  // 3人世帯
+  family4:  { total: 34.0, food: 10.0 },  // 4人世帯
+  family5:  { total: 35.0 }   // 5人以上
+};
+
+const CATEGORY_LABELS = {
+  food: '食費', housing: '住居費', utility: '水道光熱費', comm: '通信費',
+  edu: '教育費', insurance: '保険料', daily: '日用雑費', social: '交際費',
+  other: 'その他', savings: '貯蓄'
+};
+
+// 世帯タイプ自動判定
+function detectHouseholdType() {
+  const partnerAge = getVal('partnerAge');
+  const partnerIncome = getVal('partnerIncome');
+  const hasPartner = partnerAge > 0 || partnerIncome > 0;
+  const hasChildren = isChecked('hasChild') && children.length > 0;
+  if (!hasPartner && !hasChildren) return 'single';
+  if (hasPartner && !hasChildren) return 'couple';
+  // 子ありの場合、最年長の子の年齢で判定
+  const maxChildAge = Math.max(...children.map(c => c.age));
+  return maxChildAge <= 11 ? 'small' : 'teens';
+}
+
+// 家計調査AVG用の世帯人員区分
+function detectKakeiAvgKey() {
+  const partnerAge = getVal('partnerAge');
+  const partnerIncome = getVal('partnerIncome');
+  const hasPartner = partnerAge > 0 || partnerIncome > 0;
+  const childCount = isChecked('hasChild') ? children.length : 0;
+  const persons = (hasPartner ? 2 : 1) + childCount;
+  if (persons === 1) return 'single';
+  if (persons === 2 && hasPartner && childCount === 0) return 'couple';
+  if (persons === 3) return 'family3';
+  if (persons === 4) return 'family4';
+  return 'family5';
+}
+
+// 月の手取り（年収＋ボーナス÷12）
+function getMonthlyTakeHome() {
+  const myIncome = getVal('myIncome') || 0;
+  const partnerIncome = getVal('partnerIncome') || 0;
+  const myBonus = getVal('myBonus') || 0;
+  const partnerBonus = getVal('partnerBonus') || 0;
+  return Math.round((myIncome + partnerIncome + myBonus + partnerBonus) / 12 * 10) / 10;
+}
+
+// 詳細モードのカテゴリ別支出を診断用にマッピング（万円/月）
+function getCategoryActuals() {
+  const isDetail = isChecked('expenseDetailMode');
+  if (!isDetail) return null;
+  const cats = {};
+  expenseCategories.forEach(c => { cats[c.name] = parseFloat(c.amount) || 0; });
+  // 住居費 = 家賃 + 住宅ローン月額
+  let housing = cats['家賃'] || 0;
+  if (isChecked('hasHomeLoan')) {
+    const hlmInput = document.getElementById('homeLoanMonthly')?.value;
+    const homeLoanMonthly = hlmInput
+      ? parseFloat(hlmInput)
+      : calcLoanMonthly(getVal('homeLoanBalance'), getVal('homeLoanRate'), getVal('homeLoanYears'));
+    housing += homeLoanMonthly || 0;
+  }
+  // 教育費（月額換算） = 子どもの今年度の学費合計÷12 ＋ 保育園料（既に月額）
+  const eduYearly = isChecked('hasChild') ? getTotalEduCost(0) : 0;
+  const edu = (eduYearly / 12) + (cats['保育園料'] || 0);
+  return {
+    food:      (cats['食費（外食）'] || 0) + (cats['食費（スーパー）'] || 0),
+    housing,
+    utility:   cats['光熱費'] || 0,
+    comm:      cats['サブスク'] || 0,
+    edu,
+    insurance: cats['保険'] || 0,
+    daily:     cats['日用品'] || 0,
+    social:    cats['交際費'] || 0,
+    other:     cats['臨時費'] || 0
+    // 貯蓄(savings)は資産推移から推定するため診断対象外
+  };
+}
+
+// 診断実行
+function runDiagnosis() {
+  const takeHome = getMonthlyTakeHome();
+  if (takeHome <= 0) {
+    showDiagnosisError('年収・ボーナスが未入力です。収入セクションで入力してから診断してください。');
+    return;
+  }
+  const actuals = getCategoryActuals();
+  if (!actuals) {
+    showDiagnosisError('診断には支出の<b>詳細モード</b>での入力が必要です。<br>支出セクションで「詳細モード」をONにし、各カテゴリに金額を入力してから再度お試しください。');
+    return;
+  }
+  const type = detectHouseholdType();
+  const avgKey = detectKakeiAvgKey();
+  const ratios = GOLDEN_RATIOS[type];
+  const avg = KAKEI_AVG_2024[avgKey] || {};
+
+  const results = [];
+  Object.keys(ratios).forEach(key => {
+    if (key === 'savings') return; // 貯蓄は別ロジック
+    const idealPct = ratios[key];
+    const idealAmount = takeHome * idealPct / 100;
+    const actualAmount = actuals[key] !== undefined ? actuals[key] : 0;
+    let status, color, icon;
+    if (idealAmount <= 0 && actualAmount <= 0) {
+      status = '対象外'; color = 'var(--text2)'; icon = '➖';
+    } else if (idealAmount <= 0 && actualAmount > 0) {
+      status = '理想0だが支出あり'; color = 'var(--yellow)'; icon = '🟡';
+    } else {
+      const diff = actualAmount - idealAmount;
+      const diffPct = (diff / idealAmount) * 100;
+      if (diffPct >= 30) { status = '使いすぎ'; color = '#ef4444'; icon = '🔴'; }
+      else if (diffPct >= 10) { status = 'やや多い'; color = '#fbbf24'; icon = '🟡'; }
+      else if (diffPct <= -30) { status = '少なすぎ?'; color = '#60a5fa'; icon = '🔵'; }
+      else { status = 'OK'; color = '#4ade80'; icon = '🟢'; }
+    }
+    results.push({ key, label: CATEGORY_LABELS[key], idealPct, idealAmount, actualAmount, status, color, icon });
+  });
+
+  // 貯蓄判定: 残額（手取り - 全支出合計）が黄金比率の貯蓄%以上か
+  const totalExpense = Object.values(actuals).reduce((s,v) => s + v, 0);
+  const actualSavings = takeHome - totalExpense;
+  const idealSavingsPct = ratios.savings;
+  const idealSavingsAmount = takeHome * idealSavingsPct / 100;
+  let savingsStatus, savingsColor, savingsIcon;
+  if (actualSavings >= idealSavingsAmount) { savingsStatus = '十分'; savingsColor = '#4ade80'; savingsIcon = '🟢'; }
+  else if (actualSavings >= idealSavingsAmount * 0.7) { savingsStatus = 'やや不足'; savingsColor = '#fbbf24'; savingsIcon = '🟡'; }
+  else { savingsStatus = '不足'; savingsColor = '#ef4444'; savingsIcon = '🔴'; }
+
+  showDiagnosisModal({ type, avgKey, takeHome, results, totalExpense,
+    savings: { actual: actualSavings, ideal: idealSavingsAmount, idealPct: idealSavingsPct, status: savingsStatus, color: savingsColor, icon: savingsIcon },
+    avg });
+}
+
+// エラーモーダル
+function showDiagnosisError(msg) {
+  const old = document.getElementById('diagnosisMenu');
+  if (old) old.remove();
+  const menu = document.createElement('div');
+  menu.id = 'diagnosisMenu';
+  menu.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  menu.onclick = (e) => { if (e.target === menu) menu.remove(); };
+  menu.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;max-width:480px;width:100%">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="color:var(--accent2);margin:0">家計診断</h3>
+      <button class="btn-small" onclick="document.getElementById('diagnosisMenu').remove()">×</button>
+    </div>
+    <div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;padding:12px;color:var(--text);font-size:0.9em">${msg}</div>
+  </div>`;
+  document.body.appendChild(menu);
+}
+
+// 診断結果モーダル
+function showDiagnosisModal(d) {
+  const old = document.getElementById('diagnosisMenu');
+  if (old) old.remove();
+  const menu = document.createElement('div');
+  menu.id = 'diagnosisMenu';
+  menu.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  menu.onclick = (e) => { if (e.target === menu) menu.remove(); };
+
+  const fmt = (n) => Math.round(n*10)/10;
+  const rowsHtml = d.results.map(r => `
+    <tr>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border)">${r.label}<span style="color:var(--text2);font-size:0.8em;margin-left:4px">理想${r.idealPct}%</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right">${fmt(r.actualAmount)}万</td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">${fmt(r.idealAmount)}万</td>
+      <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;color:${r.color};font-weight:bold;white-space:nowrap">${r.icon} ${r.status}</td>
+    </tr>`).join('');
+
+  // 警告メッセージ（ルールベース）
+  const tips = [];
+  d.results.forEach(r => {
+    if (r.status === '使いすぎ') {
+      const over = r.actualAmount - r.idealAmount;
+      tips.push(`<b>${r.label}</b>: 理想より <span style="color:#ef4444">+${fmt(over)}万/月</span> 多い → 年間<b>${fmt(over*12)}万円</b>の余地`);
+    }
+  });
+  if (d.savings.status === '不足') {
+    const short = d.savings.ideal - d.savings.actual;
+    tips.push(`<b>貯蓄</b>: 理想より<span style="color:#ef4444">-${fmt(short)}万/月</span>不足 → 上記の使いすぎ項目を見直すと改善`);
+  }
+  const tipsHtml = tips.length > 0
+    ? `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:10px;margin-top:10px;font-size:0.85em">
+        <div style="color:#ef4444;font-weight:bold;margin-bottom:4px">💡 改善のヒント</div>
+        <ul style="margin:0;padding-left:18px;line-height:1.7">${tips.map(t => `<li>${t}</li>`).join('')}</ul>
+       </div>`
+    : `<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);border-radius:6px;padding:10px;margin-top:10px;font-size:0.85em;color:#4ade80">✨ バランスの良い家計です！この調子で頑張りましょう。</div>`;
+
+  // 家計調査AVG表示
+  const avgLabel = { single:'単身平均', couple:'夫婦平均', family3:'3人世帯平均', family4:'4人世帯平均', family5:'5人以上世帯平均' }[d.avgKey];
+  const avgHtml = d.avg.total
+    ? `<div style="background:rgba(0,210,255,0.06);border:1px solid rgba(0,210,255,0.2);border-radius:6px;padding:8px 10px;margin-top:10px;font-size:0.82em;color:var(--text2)">
+        📊 <b style="color:var(--accent2)">${avgLabel}</b>（家計調査2024年）: 消費支出合計 約<b>${d.avg.total}万円/月</b>${d.avg.food ? ` ／ 食料 約${d.avg.food}万` : ''}${d.avg.housing ? ` ／ 住居 約${d.avg.housing}万` : ''}
+       </div>`
+    : '';
+
+  menu.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="color:var(--accent2);margin:0">🏠 家計診断結果</h3>
+      <button class="btn-small" onclick="document.getElementById('diagnosisMenu').remove()">×</button>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:0.88em;margin-bottom:10px;color:var(--text2)">
+      <div>世帯タイプ: <b style="color:var(--text)">${HOUSEHOLD_LABELS[d.type]}</b></div>
+      <div>月の手取り: <b style="color:var(--text)">${fmt(d.takeHome)}万円</b></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.88em">
+      <thead>
+        <tr style="color:var(--accent2);background:rgba(0,210,255,0.06)">
+          <th style="padding:6px 8px;text-align:left">項目</th>
+          <th style="padding:6px 8px;text-align:right">実際</th>
+          <th style="padding:6px 8px;text-align:right">理想</th>
+          <th style="padding:6px 8px;text-align:right">判定</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}
+        <tr style="background:rgba(0,210,255,0.04);font-weight:bold">
+          <td style="padding:6px 8px;border-top:2px solid var(--accent2)">支出合計</td>
+          <td style="padding:6px 8px;border-top:2px solid var(--accent2);text-align:right">${fmt(d.totalExpense)}万</td>
+          <td style="padding:6px 8px;border-top:2px solid var(--accent2);text-align:right;color:var(--text2)">${fmt(d.takeHome - d.savings.ideal)}万</td>
+          <td style="padding:6px 8px;border-top:2px solid var(--accent2)"></td>
+        </tr>
+        <tr>
+          <td style="padding:6px 8px">貯蓄余力<span style="color:var(--text2);font-size:0.8em;margin-left:4px">理想${d.savings.idealPct}%</span></td>
+          <td style="padding:6px 8px;text-align:right">${fmt(d.savings.actual)}万</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--text2)">${fmt(d.savings.ideal)}万</td>
+          <td style="padding:6px 8px;text-align:right;color:${d.savings.color};font-weight:bold;white-space:nowrap">${d.savings.icon} ${d.savings.status}</td>
+        </tr>
+      </tbody>
+    </table>
+    ${tipsHtml}
+    ${avgHtml}
+    <div style="font-size:0.75em;color:var(--text2);margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+      理想%: FP横山光昭氏「家計の黄金比率」、平均: 総務省統計局 家計調査2024年 ／ 判定基準: 理想±10%以内=OK、+10〜30%=やや多い、+30%以上=使いすぎ
+    </div>
+  </div>`;
+  document.body.appendChild(menu);
 }
 
 // ====== 税金計算関数群 ======
