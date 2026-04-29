@@ -2600,6 +2600,7 @@ function simulate() {
     });
 
     // --- 年間収支 ---
+    // 内部計算用 (cashAssetsへの加算): 勤労+年金 - 経常支出 (配当/取崩は別ループで既に加算済み)
     const totalIncome = income + pensionIncome;
     const totalExpense = expense + carCost + eduCost + loanPayment + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0) + eventCost + carReplaceCost + applianceCost + travelCost;
     const annualBalance = totalIncome - totalExpense;
@@ -2640,6 +2641,14 @@ function simulate() {
     dataTotal.push(Math.round(totalAssets));
     dataDrawdown.push(isDrawingDown ? Math.round(drawdown) : 0);
 
+    // 表示用 年間収支: グラフの dataIncome - dataExpense と一致させる
+    //   収入: 勤労+年金+配当/取崩
+    //   支出: 生活費+投資積立+iDeCo拠出+旅行+教育+ローン+車+家電+イベント
+    //   注: 退職所得税/iDeCo税/年金税は「税金」列で別表示、一時金（退職金・iDeCo一括）は資産フローで別反映
+    const annualForDisplay = (income + pensionIncome + totalDividend)
+      - (expense + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0)
+        + travelCost + eduCost + loanPayment + carCost + carReplaceCost + applianceCost + eventCost);
+
     rows.push({
       age,
       income: Math.round(income),
@@ -2664,7 +2673,7 @@ function simulate() {
       investGain: Math.round(investGain),
       idecoGain: Math.round(idecoGain),
       drawdown: Math.round(drawdown),
-      annual: Math.round(annualBalance),
+      annual: Math.round(annualForDisplay),
       cash: Math.round(cashAssets),
       emergency: Math.round(emergencyFund),
       invest: Math.round(investAssets),
@@ -2705,7 +2714,7 @@ function renderChart(labels, dataCash, dataEmergency, dataInvest, dataIdeco, dat
   if (chart) chart.destroy();
 
   // 年間支出データ（ローン・学費・車・イベント含む）
-  const dataExpense = rows.map(r => Math.round(r.expense + r.edu + r.loan + r.car + r.appliance + r.eventCost));
+  const dataExpense = rows.map(r => Math.round(r.expense + r.edu + r.loan + r.car + r.appliance + r.eventCost + (r.travelCost || 0)));
   // 年間収入データ（勤労収入 + 年金 + 配当金）
   const dataIncome = rows.map(r => Math.round(r.income + r.pension + (r.dividend || 0)));
 
