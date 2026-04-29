@@ -2341,12 +2341,14 @@ function simulate() {
 
     // 退職金（税金計算付き）
     let retireTaxMy = 0, retireTaxPartner = 0;
+    let retireLumpNetMy = 0, retireLumpNetPartner = 0; // 一時金の手取り（その年のみ）
     if (age === myRetire && !myRetireBonusPaid) {
       const serviceYears = Math.max(0, myRetire - getVal('myWorkStartAge'));
       if (myRetireBonusMethod === 'lump') {
         const tax = calcRetirementTax(myRetireBonus, serviceYears);
         cashAssets += myRetireBonus - tax;
         retireTaxMy = tax;
+        retireLumpNetMy = myRetireBonus - tax;
       } else if (myRetireBonusMethod === 'annuity10' || myRetireBonusMethod === 'annuity20') {
         const yrs = myRetireBonusMethod === 'annuity10' ? 10 : 20;
         myRetireBonusAnnualPayout = myRetireBonus / yrs;
@@ -2357,6 +2359,7 @@ function simulate() {
         const tax = calcRetirementTax(lumpPart, serviceYears);
         cashAssets += lumpPart - tax;
         retireTaxMy = tax;
+        retireLumpNetMy = lumpPart - tax;
         myRetireBonusAnnualPayout = annuityPart / 10;
         myRetireBonusPayoutLeft = 10;
       }
@@ -2368,6 +2371,7 @@ function simulate() {
         const tax = calcRetirementTax(partnerRetireBonus, serviceYears);
         cashAssets += partnerRetireBonus - tax;
         retireTaxPartner = tax;
+        retireLumpNetPartner = partnerRetireBonus - tax;
       } else if (partnerRetireBonusMethod === 'annuity10' || partnerRetireBonusMethod === 'annuity20') {
         const yrs = partnerRetireBonusMethod === 'annuity10' ? 10 : 20;
         partnerRetireBonusAnnualPayout = partnerRetireBonus / yrs;
@@ -2378,6 +2382,7 @@ function simulate() {
         const tax = calcRetirementTax(lumpPart, serviceYears);
         cashAssets += lumpPart - tax;
         retireTaxPartner = tax;
+        retireLumpNetPartner = lumpPart - tax;
         partnerRetireBonusAnnualPayout = annuityPart / 10;
         partnerRetireBonusPayoutLeft = 10;
       }
@@ -2515,6 +2520,7 @@ function simulate() {
     let idecoGain = 0;
     let idecoTaxAmount = 0;
     let idecoAnnuityThisYear = 0;
+    let idecoLumpNetThisYear = 0; // iDeCo一時金の手取り（その年のみ）
     if (hasIdeco) {
       if (age < 60) {
         idecoGain = idecoAssets * idecoReturn;
@@ -2539,7 +2545,8 @@ function simulate() {
             }
             const taxableIdeco = Math.max(0, (idecoAssets - idecoDeduction)) * 0.5;
             idecoTaxAmount = taxableIdeco > 0 ? applyIncomeTaxBrackets(taxableIdeco) * 1.021 + taxableIdeco * 0.10 : 0;
-            cashAssets += idecoAssets - idecoTaxAmount;
+            idecoLumpNetThisYear = idecoAssets - idecoTaxAmount;
+            cashAssets += idecoLumpNetThisYear;
             idecoAnnualPayout = 0;
             idecoAssets = 0;
           } else {
@@ -2641,13 +2648,17 @@ function simulate() {
     dataTotal.push(Math.round(totalAssets));
     dataDrawdown.push(isDrawingDown ? Math.round(drawdown) : 0);
 
-    // 表示用 年間収支: グラフの dataIncome - dataExpense と一致させる
-    //   収入: 勤労+年金+配当/取崩
-    //   支出: 生活費+投資積立+iDeCo拠出+旅行+教育+ローン+車+家電+イベント
-    //   注: 退職所得税/iDeCo税/年金税は「税金」列で別表示、一時金（退職金・iDeCo一括）は資産フローで別反映
-    const annualForDisplay = (income + pensionIncome + totalDividend)
+    // 表示用 年間収支: 「年間収支(N) + 現金(N-1) = 現金(N)」となるように、
+    //                   全ての現金フロー（退職金一時金・iDeCo一時金・年金等の年金支給・年金税）を含める
+    //   収入: 勤労+年金+配当/取崩+退職金一時金(手取り)+退職金年金支給+iDeCo一時金(手取り)+iDeCo年金支給
+    //   支出: 生活費+投資積立+iDeCo拠出+旅行+教育+ローン+車+家電+イベント+年金税
+    const annualForDisplay = (income + pensionIncome + totalDividend
+        + retireLumpNetMy + retireLumpNetPartner
+        + retireBonusAnnuityMy + retireBonusAnnuityPartner
+        + idecoLumpNetThisYear + idecoAnnuityThisYear)
       - (expense + investMonthlyTotal * 12 + (hasIdeco && age < 60 ? idecoMonthly * 12 : 0)
-        + travelCost + eduCost + loanPayment + carCost + carReplaceCost + applianceCost + eventCost);
+        + travelCost + eduCost + loanPayment + carCost + carReplaceCost + applianceCost + eventCost
+        + pensionTax);
 
     rows.push({
       age,
